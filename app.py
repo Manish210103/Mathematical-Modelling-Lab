@@ -15,13 +15,12 @@ from visualization import create_trajectory_plot, create_2d_plots
 from math_utils import mean, std_deviation
 
 def main():
-    st.set_page_config(page_title="DRS-Lite System", layout="wide", page_icon="🏏")
+    st.set_page_config(page_title="DRS System", layout="wide", page_icon="🏏")
     
-    st.title("🏏 DRS-Lite: Cricket Ball Trajectory Analysis System")
-    st.markdown("*Using Cubic Spline Interpolation & Physics-Based Extrapolation with Real Cricket LBW Rules*")
+    st.title("🏏 DRS: Cricket Ball Trajectory Analysis System")
     
     # Sidebar
-    st.sidebar.title("⚙️ Configuration")
+    st.sidebar.title("Configuration")
     
     # Scenario selection
     scenarios = get_available_scenarios()
@@ -46,15 +45,15 @@ def main():
     # Navigation
     page = st.sidebar.radio(
         "Select Analysis Module",
-        ["📊 Trajectory Analysis", 
-         "⚖️ LBW Decision", 
-         "🎨 3D Visualization"]
+        ["Trajectory Analysis", 
+         "LBW Decision", 
+         "3D Visualization"]
     )
     
     st.sidebar.markdown("---")
     
     # Generate trajectory button
-    if st.sidebar.button("🎲 Generate Trajectory", type="primary"):
+    if st.sidebar.button("Generate Trajectory", type="primary"):
         with st.spinner(f"Generating {scenarios[selected_scenario]}..."):
             trajectory = generate_bouncing_trajectory(selected_scenario, tracking_distance)
             st.session_state.trajectory = trajectory
@@ -79,16 +78,16 @@ def main():
         st.session_state.lbw_result = None
     
     # Render selected page
-    if page == "📊 Trajectory Analysis":
+    if page == "Trajectory Analysis":
         render_trajectory_analysis_page()
-    elif page == "⚖️ LBW Decision":
+    elif page == "LBW Decision":
         render_lbw_decision_page()
-    elif page == "🎨 3D Visualization":
+    elif page == "3D Visualization":
         render_3d_visualization_page()
     
 def render_trajectory_analysis_page():
     """Render trajectory analysis page"""
-    st.header("📊 Ball Trajectory Analysis")
+    st.header("Ball Trajectory Analysis")
     
     trajectory = st.session_state.trajectory
     scenario_info = get_available_scenarios()
@@ -105,7 +104,7 @@ def render_trajectory_analysis_page():
     st.markdown("---")
     
     # Trajectory statistics
-    st.subheader("📈 Tracked Trajectory Statistics")
+    st.subheader("Tracked Trajectory Statistics")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -127,7 +126,7 @@ def render_trajectory_analysis_page():
     
     # Fit spline and extrapolate
     st.markdown("---")
-    st.subheader("📬 Cubic Spline Fitting & Extrapolation to Stumps")
+    st.subheader("Cubic Spline Fitting & Extrapolation to Stumps")
     
     col1, col2 = st.columns(2)
     
@@ -148,7 +147,7 @@ def render_trajectory_analysis_page():
         - Maintains velocity continuity
         """)
     
-    if st.button("📬 Fit Spline & Extrapolate to Stumps", type="primary"):
+    if st.button("Fit Spline & Extrapolate to Stumps", type="primary"):
         with st.spinner("Fitting cubic spline and extrapolating with physics..."):
             spline_model = fit_cubic_spline(trajectory)
             st.session_state.spline_model = spline_model
@@ -159,13 +158,13 @@ def render_trajectory_analysis_page():
             rmse_values = calculate_rmse(trajectory, spline_model)
             
             st.success("✅ Spline fitted successfully!")
-            st.info(f"📊 RMSE - Z: {rmse_values['rmse_z']:.5f}m, Y: {rmse_values['rmse_y']:.5f}m")
+            st.info(f"RMSE - Z: {rmse_values['rmse_z']:.5f}m, Y: {rmse_values['rmse_y']:.5f}m")
             st.success(f"✅ Extrapolated {len(extrapolated)} points to stumps")
     
     # Display fitted model info
     if st.session_state.spline_model:
         st.markdown("---")
-        st.subheader("📈 Spline Model Details")
+        st.subheader("Spline Model Details")
         
         spline = st.session_state.spline_model
         
@@ -183,7 +182,7 @@ def render_trajectory_analysis_page():
     # Display extrapolated points
     if st.session_state.extrapolated:
         st.markdown("---")
-        st.subheader("🎯 Extrapolated Points (Physics-Based)")
+        st.subheader("Extrapolated Points (Physics-Based)")
         
         col1, col2 = st.columns([2, 1])
         
@@ -202,17 +201,17 @@ def render_trajectory_analysis_page():
     # 2D Plots
     if st.session_state.extrapolated:
         st.markdown("---")
-        st.subheader("📉 2D Trajectory Views")
+        st.subheader("2D Trajectory Views")
         
         fig_2d = create_2d_plots(trajectory, st.session_state.extrapolated)
         st.plotly_chart(fig_2d, use_container_width=True)
 
 def render_lbw_decision_page():
     """Render LBW decision page with real cricket rules"""
-    st.header("⚖️ LBW (Leg Before Wicket) Decision System")
+    st.header("LBW (Leg Before Wicket) Decision System")
     
     if not st.session_state.extrapolated:
-        st.warning("⚠️ Please fit spline and extrapolate trajectory first")
+        st.warning("Please fit spline and extrapolate trajectory first")
         return
     
     trajectory = st.session_state.trajectory
@@ -247,7 +246,7 @@ def render_lbw_decision_page():
     st.markdown("---")
     
     # Calculate LBW
-    if st.button("⚖️ Calculate LBW Decision (All Rules)", type="primary"):
+    if st.button("Calculate LBW Decision (All Rules)", type="primary"):
         with st.spinner("Analyzing ball trajectory with real cricket rules..."):
             lbw_result = calculate_lbw_decision(trajectory, extrapolated)
             ball_path_analysis = analyze_ball_path(trajectory, extrapolated)
@@ -262,7 +261,7 @@ def render_lbw_decision_page():
         result = st.session_state.lbw_result
         
         st.markdown("---")
-        st.subheader("⚖️ FINAL DECISION")
+        st.subheader("FINAL DECISION")
         
         # Big decision display
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -279,7 +278,7 @@ def render_lbw_decision_page():
         st.markdown("---")
         
         # Rule checks
-        st.subheader("🔍 Rule Verification")
+        st.subheader(" Rule Verification")
         
         checks = result['rule_checks']
         
@@ -308,7 +307,7 @@ def render_lbw_decision_page():
         st.markdown("---")
         
         # Detailed position analysis
-        st.subheader("📍 Impact Point Analysis at Stumps (20m)")
+        st.subheader("Impact Point Analysis at Stumps (20m)")
         
         details = result['details']
         stumps = details['stumps']
@@ -338,7 +337,7 @@ def render_lbw_decision_page():
         # Ball path characteristics
         if 'ball_path' in st.session_state:
             st.markdown("---")
-            st.subheader("🎯 Ball Path Characteristics")
+            st.subheader("Ball Path Characteristics")
             
             path = st.session_state.ball_path
             
@@ -370,7 +369,7 @@ def render_lbw_decision_page():
 
 def render_3d_visualization_page():
     """Render 3D visualization page"""
-    st.header("🎨 Interactive 3D Ball Trajectory Visualization")
+    st.header("Interactive 3D Ball Trajectory Visualization")
     
     trajectory = st.session_state.trajectory
     
@@ -397,7 +396,7 @@ def render_3d_visualization_page():
     
     # Summary
     st.markdown("---")
-    st.subheader("📊 Trajectory Summary")
+    st.subheader("Trajectory Summary")
     
     col1, col2, col3, col4 = st.columns(4)
     

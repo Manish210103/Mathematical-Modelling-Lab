@@ -176,7 +176,7 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
     # Layout settings
     fig.update_layout(
         title={
-            'text': '🏏 Cricket Ball Trajectory Analysis - DRS System',
+            'text': 'Cricket Ball Trajectory Analysis - DRS System',
             'x': 0.5,
             'xanchor': 'center',
             'font': {'size': 24, 'color': 'white', 'family': 'Arial Black'}
