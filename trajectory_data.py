@@ -11,29 +11,21 @@ def generate_bouncing_trajectory(scenario_type, tracking_distance):
     Physics formula:
     x(t) = v_x * t
     y(t) = y_0 + v_y * t
-    z(t) = z_0 + v_z * t - 0.5 * g * t^2
-    
-    Args:
-        scenario_type: Type of delivery
-        tracking_distance: Distance till batsman (15-18m)
-    
-    Returns:
-        Smooth trajectory points from 0m to tracking_distance
+    z(t) = z_0 + v_z * t - 0.5 * g * t^2 ( Vertical displacement )
     """
     
-    RELEASE_HEIGHT = 2.0  # Ball release height
-    GRAVITY = 9.81  # m/s²
+    RELEASE_HEIGHT = 2.0
+    GRAVITY = 9.81
     
     trajectory = []
     
     # Define initial conditions for each delivery type
     if scenario_type == "good_length":
         # Ball that bounces around 6m
-        v_x = 20.0  # Forward velocity (m/s)
-        v_z_initial = -2.0  # Initial downward velocity
-        v_y_initial = 0.02  # Slight lateral velocity
-        bounce_coeff = 0.6  # Velocity retention after bounce
-        expected_bounce = 6.0
+        v_x = 20.0  
+        v_z_initial = -2.0  
+        v_y_initial = 0.02  
+        bounce_coeff = 0.6 
         
     elif scenario_type == "yorker":
         # Bounces very close to batsman
@@ -41,7 +33,6 @@ def generate_bouncing_trajectory(scenario_type, tracking_distance):
         v_z_initial = 0.75
         v_y_initial = 0.001
         bounce_coeff = 0.1
-        expected_bounce = tracking_distance - 2.5
         
     elif scenario_type == "short_pitch":
         # Early bounce, rises high
@@ -49,7 +40,6 @@ def generate_bouncing_trajectory(scenario_type, tracking_distance):
         v_z_initial = -1.5
         v_y_initial = 0.04
         bounce_coeff = 0.75
-        expected_bounce = 4.5
         
     elif scenario_type == "half_volley":
         # Medium bounce
@@ -57,10 +47,9 @@ def generate_bouncing_trajectory(scenario_type, tracking_distance):
         v_z_initial = -2.5
         v_y_initial = 0
         bounce_coeff = 0.65
-        expected_bounce = 8.0
     
     t = 0.0
-    dt = 0.01  # Small time step for smooth curve
+    dt = 0.01
     
     x, y, z = 0.0, 0.0, RELEASE_HEIGHT
     v_z = v_z_initial
@@ -94,7 +83,6 @@ def generate_bouncing_trajectory(scenario_type, tracking_distance):
         if z <= 0 and not has_bounced and x > 1.0:
             has_bounced = True
             bounce_time = t
-            bounce_x = x
             bounce_y = y
             bounce_z = 0.0
             

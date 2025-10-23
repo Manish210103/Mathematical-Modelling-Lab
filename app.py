@@ -1,18 +1,24 @@
 """
-DRS-Lite: Cricket Ball Trajectory Analysis with Cubic Spline & Smooth Curve Extrapolation
-Main Streamlit Application - Updated with real cricket LBW rules
+DRS-Lite: Cricket Ball Trajectory Analysis - UPDATED
+With Advanced Analysis Features:
+1. Trajectory Decomposition
+2. Risk-Return Analysis
+3. Confidence Intervals
+4. Sensitivity Analysis
+5. Comparative Delivery Analysis
 """
 
 import streamlit as st
 import pandas as pd
 
-# Import custom modules
 from trajectory_data import generate_bouncing_trajectory, get_available_scenarios
 from curve_fitting import (fit_cubic_spline, extrapolate_to_stumps, 
                            calculate_rmse, evaluate_spline)
 from lbw_analysis import calculate_lbw_decision, analyze_ball_path
 from visualization import create_trajectory_plot, create_2d_plots
 from math_utils import mean, std_deviation
+from advanced_analysis import decompose_trajectory_advanced
+
 
 def main():
     st.set_page_config(page_title="DRS System", layout="wide", page_icon="🏏")
@@ -76,6 +82,8 @@ def main():
         st.session_state.extrapolated = None
     if 'lbw_result' not in st.session_state:
         st.session_state.lbw_result = None
+    if 'deliveries_history' not in st.session_state:
+        st.session_state.deliveries_history = []
     
     # Render selected page
     if page == "Trajectory Analysis":
@@ -84,7 +92,10 @@ def main():
         render_lbw_decision_page()
     elif page == "3D Visualization":
         render_3d_visualization_page()
-    
+    # elif page == "Advanced Analysis":
+    #     render_advanced_analysis_page()
+
+
 def render_trajectory_analysis_page():
     """Render trajectory analysis page"""
     st.header("Ball Trajectory Analysis")
@@ -136,8 +147,8 @@ def render_trajectory_analysis_page():
             rmse_values = calculate_rmse(trajectory, spline_model)
             
             st.success("✅ Spline fitted successfully!")
-            st.info(f"RMSE - Z: {rmse_values['rmse_z']:.5f}m, Y: {rmse_values['rmse_y']:.5f}m")
             st.success(f"✅ Extrapolated {len(extrapolated)} points to stumps")
+    
     
     # Display fitted model info
     if st.session_state.spline_model:
@@ -156,6 +167,24 @@ def render_trajectory_analysis_page():
             rmse_values = calculate_rmse(trajectory, spline)
             st.metric("Fit Quality (RMSE)", f"{rmse_values['rmse_z']:.5f} m")
             st.caption("Root Mean Square Error in Z-direction")
+        
+        # ADD THESE LINES TO PRINT EQUATIONS
+        st.markdown("---")
+
+        # Single collapsible section for all equations
+        with st.expander("📐 View Cubic Spline Equations (Click to Expand)", expanded=False):
+            from curve_fitting import get_spline_equations_text
+            
+            # Create tabs for Z and Y equations
+            eq_tab1, eq_tab2 = st.tabs(["Z-Axis (Height)", "Y-Axis (Lateral)"])
+            
+            with eq_tab1:
+                equations_z = get_spline_equations_text(spline, 'z')
+                st.code(equations_z, language='text')
+            
+            with eq_tab2:
+                equations_y = get_spline_equations_text(spline, 'y')
+                st.code(equations_y, language='text')
     
     # Display extrapolated points
     if st.session_state.extrapolated:
@@ -181,6 +210,7 @@ def render_trajectory_analysis_page():
         
         fig_2d = create_2d_plots(trajectory, st.session_state.extrapolated)
         st.plotly_chart(fig_2d, use_container_width=True)
+
 
 def render_lbw_decision_page():
     """Render LBW decision page with real cricket rules"""
@@ -225,6 +255,14 @@ def render_lbw_decision_page():
             st.session_state.lbw_result = lbw_result
             st.session_state.ball_path = ball_path_analysis
             
+            # Store in history for comparative analysis
+            st.session_state.deliveries_history.append({
+                'trajectory': trajectory,
+                'extrapolated': extrapolated,
+                'scenario_type': st.session_state.scenario_type,
+                'lbw_result': lbw_result
+            })
+            
             st.success("✅ LBW analysis complete")
     
     # Display LBW result
@@ -247,7 +285,7 @@ def render_lbw_decision_page():
         st.markdown("---")
         
         # Rule checks
-        st.subheader(" Rule Verification")
+        st.subheader("✓ Rule Verification")
         
         checks = result['rule_checks']
         
@@ -329,12 +367,7 @@ def render_lbw_decision_page():
                 st.metric("Lateral Variation", f"{path['lateral_variation']:.3f} m")
             
             st.info(f"**Trajectory Type:** {path['trajectory_type']}")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Tracked Distance", f"{path['total_tracked_distance']:.2f} m")
-            with col2:
-                st.metric("Extrapolated Distance", f"{path['total_extrapolated_distance']:.2f} m")
+
 
 def render_3d_visualization_page():
     """Render 3D visualization page"""
@@ -376,5 +409,64 @@ def render_3d_visualization_page():
         distance = trajectory[-1]['x']
         st.metric("Tracking Distance", f"{distance:.2f} m")
 
+
+# def render_advanced_analysis_page():
+#     """Render advanced analysis page (Trajectory Decomposition only)"""
+#     st.header("🔬 Advanced Trajectory Decomposition")
+
+#     if not st.session_state.get("trajectory"):
+#         st.warning("Please load trajectory data first (go to Trajectory Analysis tab).")
+#         return
+
+#     trajectory = st.session_state.trajectory
+
+#     st.subheader("Trajectory Decomposition (Trend + Noise Analysis)")
+    
+#     st.markdown("""
+#     Decomposes tracked trajectory into:
+#     - **Trend**: Smooth underlying motion pattern
+#     - **Noise**: Random measurement variations
+#     - **SNR**: Signal-to-Noise Ratio (quality indicator)
+#     - **Curvature & Diagnostics**: Detects swing, bounce, or lateral deviations
+#     """)
+
+#     if st.button("Analyze Decomposition", key="decomp_btn"):
+#         with st.spinner("Decomposing trajectory..."):
+#             decomp = decompose_trajectory_advanced(trajectory)
+            
+#             if "error" in decomp:
+#                 st.error(decomp["error"])
+#                 return
+
+#             # Display main metrics
+#             col1, col2, col3, col4 = st.columns(4)
+#             with col1:
+#                 st.metric("Noise Std (Z)", f"{decomp['noise_std_z']:.4f} m")
+#             with col2:
+#                 st.metric("Noise Std (Y)", f"{decomp['noise_std_y']:.4f} m")
+#             with col3:
+#                 st.metric("SNR Z", f"{decomp['snr_z']:.2f}")
+#             with col4:
+#                 st.metric("SNR Y", f"{decomp['snr_y']:.2f}")
+
+#             # Trend and curvature details
+#             col1, col2 = st.columns(2)
+#             with col1:
+#                 st.write("**Z-Axis Trend Analysis**")
+#                 st.write(f"Trend points: {len(decomp['trend_z'])}")
+#                 st.write(f"Mean Curvature: {decomp['curvature_z_mean']:.5f}")
+#                 st.write(f"Dominant Noise Frequency: {decomp['dominant_noise_freq_z']}")
+#             with col2:
+#                 st.write("**Y-Axis Trend Analysis**")
+#                 st.write(f"Trend points: {len(decomp['trend_y'])}")
+#                 st.write(f"Mean Curvature: {decomp['curvature_y_mean']:.5f}")
+#                 st.write(f"Dominant Noise Frequency: {decomp['dominant_noise_freq_y']}")
+
+#             # Quality and diagnostic remarks
+#             st.info(f"**Quality Assessment:** {decomp['quality_assessment']}")
+#             st.markdown("**Diagnostic Remarks:**")
+#             st.write(decomp['diagnostic_remarks'])
+            
+               
 if __name__ == "__main__":
     main()

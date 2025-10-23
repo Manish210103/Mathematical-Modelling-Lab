@@ -3,6 +3,7 @@ Extrapolation using velocity-based physics with improved cricket ball dynamics
 Continues ball path from batsman to stumps using realistic projectile motion
 Handles bouncing during extrapolation phase (e.g., yorker deliveries)
 Ensures smooth continuation from tracked trajectory with proper cricket physics
+NOW WITH CUBIC SPLINE EQUATION PRINTING
 """
 from math_utils import sqrt
 import math
@@ -17,79 +18,257 @@ def fit_cubic_spline(trajectory):
     y_points = [p['y'] for p in trajectory]
     z_points = [p['z'] for p in trajectory]
     
-    spline_z = compute_natural_cubic_spline(x_points, z_points)
-    spline_y = compute_natural_cubic_spline(x_points, y_points)
+    spline_z, fpp_z = compute_natural_cubic_spline(x_points, z_points)
+    spline_y, fpp_y = compute_natural_cubic_spline(x_points, y_points)
     
     return {
         'x_points': x_points,
         'spline_z': spline_z,
         'spline_y': spline_y,
+        'fpp_z': fpp_z,  # Store second derivatives
+        'fpp_y': fpp_y,
         'n_segments': n - 1
     }
 
-def compute_natural_cubic_spline(x, y):
-    """Compute natural cubic spline coefficients"""
-    n = len(x) - 1
-    h = [x[i+1] - x[i] for i in range(n)]
+def compute_natural_cubic_spline(x, f):
+    """
+    Compute natural cubic spline coefficients using the mathematical formula:
     
-    alpha = [0.0] * (n + 1)
-    for i in range(1, n):
-        alpha[i] = (3.0/h[i])*(y[i+1]-y[i]) - (3.0/h[i-1])*(y[i]-y[i-1])
+    For i = 1, 2, ..., n-2:
+    a_i * f''_{i-1} + b_i * f''_i + c_i * f''_{i+1} = rhs_i
     
-    l = [1.0] * (n + 1)
-    mu = [0.0] * (n + 1)
-    z = [0.0] * (n + 1)
+    Where:
+    - a_i = x_i - x_{i-1}
+    - b_i = 2(x_{i+1} - x_{i-1})
+    - c_i = x_{i+1} - x_i
+    - rhs_i = (6/(x_{i+1} - x_i))(f_{i+1} - f_i) - (6/(x_i - x_{i-1}))(f_i - f_{i-1})
     
-    for i in range(1, n):
-        l[i] = 2*(x[i+1]-x[i-1]) - h[i-1]*mu[i-1]
-        if abs(l[i]) < 1e-10:
-            l[i] = 1e-10
-        mu[i] = h[i] / l[i]
-        z[i] = (alpha[i] - h[i-1]*z[i-1]) / l[i]
+    Boundary conditions: f''_0 = 0, f''_{n-1} = 0 (natural spline)
     
-    c = [0.0] * (n + 1)
-    b = [0.0] * n
-    d = [0.0] * n
-    a = y[:]
+    Returns: (spline_coeffs, fpp) where fpp is list of second derivatives
+    """
+    n = len(x)
     
-    for j in range(n-1, -1, -1):
-        c[j] = z[j] - mu[j]*c[j+1]
-        b[j] = (y[j+1]-y[j])/h[j] - h[j]*(c[j+1]+2*c[j])/3
-        d[j] = (c[j+1]-c[j])/(3*h[j])
+    # Build tridiagonal system for f'' values
+    # For natural spline: f''_0 = 0, f''_{n-1} = 0
+    
+    # Number of unknowns: f''_1, f''_2, ..., f''_{n-2}
+    num_unknowns = n - 2
+    
+    if num_unknowns <= 0:
+        # Not enough points, return simple linear interpolation
+        return compute_simple_spline(x, f), [0.0] * n
+    
+    # Initialize tridiagonal matrix components
+    lower_diag = []  # a_i values
+    main_diag = []   # b_i values
+    upper_diag = []  # c_i values
+    rhs = []         # right hand side values
+    
+    # Build system of equations for i = 1, 2, ..., n-2
+    for i in range(1, n - 1):
+        a_i = x[i] - x[i - 1]
+        b_i = 2 * (x[i + 1] - x[i - 1])
+        c_i = x[i + 1] - x[i]
+        
+        # Calculate right hand side
+        term1 = (6.0 / (x[i + 1] - x[i])) * (f[i + 1] - f[i])
+        term2 = (6.0 / (x[i] - x[i - 1])) * (f[i] - f[i - 1])
+        rhs_i = term1 - term2
+        
+        if i > 1:
+            lower_diag.append(a_i)
+        main_diag.append(b_i)
+        if i < n - 2:
+            upper_diag.append(c_i)
+        rhs.append(rhs_i)
+    
+    # Solve tridiagonal system
+    fpp_inner = solve_tridiagonal_system(lower_diag, main_diag, upper_diag, rhs)
+    
+    # Construct full f'' array with boundary conditions
+    fpp = [0.0] + fpp_inner + [0.0]
+    
+    # Build spline segments using the formula:
+    # S_i(x) = f''_i * (x_{i+1} - x)^3 / (6*h_i) + f''_{i+1} * (x - x_i)^3 / (6*h_i)
+    #        + (f_i/h_i - f''_i*h_i/6) * (x_{i+1} - x)
+    #        + (f_{i+1}/h_i - f''_{i+1}*h_i/6) * (x - x_i)
     
     spline_coeffs = []
-    for i in range(n):
+    for i in range(n - 1):
+        h_i = x[i + 1] - x[i]
+        
+        # Calculate coefficients for cubic polynomial
+        # We'll store them in a way that allows easy evaluation
         spline_coeffs.append({
             'x_start': x[i],
-            'x_end': x[i+1],
-            'a': a[i],
-            'b': b[i],
-            'c': c[i],
-            'd': d[i]
+            'x_end': x[i + 1],
+            'h': h_i,
+            'f_i': f[i],
+            'f_i1': f[i + 1],
+            'fpp_i': fpp[i],
+            'fpp_i1': fpp[i + 1]
         })
     
+    return spline_coeffs, fpp
+
+def solve_tridiagonal_system(lower, main, upper, rhs):
+    """
+    Solve tridiagonal system using Thomas algorithm
+    lower: lower diagonal (a_i)
+    main: main diagonal (b_i)
+    upper: upper diagonal (c_i)
+    rhs: right hand side
+    """
+    n = len(main)
+    if n == 0:
+        return []
+    
+    # Forward elimination
+    c_prime = [0.0] * n
+    d_prime = [0.0] * n
+    
+    c_prime[0] = upper[0] / main[0] if n > 1 else 0
+    d_prime[0] = rhs[0] / main[0]
+    
+    for i in range(1, n):
+        denom = main[i] - (lower[i - 1] if i > 0 else 0) * c_prime[i - 1]
+        if abs(denom) < 1e-10:
+            denom = 1e-10
+        
+        if i < n - 1:
+            c_prime[i] = upper[i] / denom
+        d_prime[i] = (rhs[i] - (lower[i - 1] if i > 0 else 0) * d_prime[i - 1]) / denom
+    
+    # Back substitution
+    solution = [0.0] * n
+    solution[n - 1] = d_prime[n - 1]
+    
+    for i in range(n - 2, -1, -1):
+        solution[i] = d_prime[i] - c_prime[i] * solution[i + 1]
+    
+    return solution
+
+def compute_simple_spline(x, f):
+    """Fallback for when we don't have enough points"""
+    spline_coeffs = []
+    for i in range(len(x) - 1):
+        spline_coeffs.append({
+            'x_start': x[i],
+            'x_end': x[i + 1],
+            'h': x[i + 1] - x[i],
+            'f_i': f[i],
+            'f_i1': f[i + 1],
+            'fpp_i': 0.0,
+            'fpp_i1': 0.0
+        })
     return spline_coeffs
 
+def get_spline_equations_text(spline_model, coordinate='z'):
+    """
+    Generate human-readable equations for the cubic spline segments
+    
+    Returns a formatted string with all segment equations
+    """
+    if not spline_model:
+        return "No spline model available"
+    
+    if coordinate == 'z':
+        spline_coeffs = spline_model['spline_z']
+        fpp = spline_model.get('fpp_z', [])
+        coord_name = "Z (Height)"
+    else:
+        spline_coeffs = spline_model['spline_y']
+        fpp = spline_model.get('fpp_y', [])
+        coord_name = "Y (Lateral)"
+    
+    equations_text = f"Cubic Spline Equations for {coord_name}:\n"
+    equations_text += "=" * 80 + "\n\n"
+    
+    # Print second derivatives if available
+    if fpp:
+        equations_text += "Second Derivatives (f''):\n"
+        for i, fpp_val in enumerate(fpp):
+            equations_text += f"  f''_{i} = {fpp_val:.6f}\n"
+        equations_text += "\n"
+    
+    # Print each segment equation
+    for i, seg in enumerate(spline_coeffs):
+        x_i = seg['x_start']
+        x_i1 = seg['x_end']
+        h = seg['h']
+        f_i = seg['f_i']
+        f_i1 = seg['f_i1']
+        fpp_i = seg['fpp_i']
+        fpp_i1 = seg['fpp_i1']
+        
+        equations_text += f"Segment S_{i}(x) for interval [{x_i:.3f}, {x_i1:.3f}]:\n"
+        equations_text += f"  h_{i} = {h:.3f}\n"
+        equations_text += f"  f_{i} = {f_i:.6f}, f_{i+1} = {f_i1:.6f}\n"
+        equations_text += f"  f''_{i} = {fpp_i:.6f}, f''_{i+1} = {fpp_i1:.6f}\n\n"
+        
+        # Build the equation symbolically
+        equations_text += f"  S_{i}(x) = \n"
+        equations_text += f"    {fpp_i:.6f} * (({x_i1:.3f} - x)^3) / (6 * {h:.3f})\n"
+        equations_text += f"  + {fpp_i1:.6f} * ((x - {x_i:.3f})^3) / (6 * {h:.3f})\n"
+        
+        coeff_3 = f_i / h - fpp_i * h / 6
+        coeff_4 = f_i1 / h - fpp_i1 * h / 6
+        
+        equations_text += f"  + {coeff_3:.6f} * ({x_i1:.3f} - x)\n"
+        equations_text += f"  + {coeff_4:.6f} * (x - {x_i:.3f})\n"
+        equations_text += "\n"
+    
+    return equations_text
+
 def evaluate_spline(spline_model, x_value, coordinate='z'):
-    """Evaluate spline at given x value"""
+    """
+    Evaluate spline at given x value using the cubic spline formula:
+    
+    S_i(x) = f''_i * (x_{i+1} - x)^3 / (6*h_i) 
+           + f''_{i+1} * (x - x_i)^3 / (6*h_i)
+           + (f_i/h_i - f''_i*h_i/6) * (x_{i+1} - x)
+           + (f_{i+1}/h_i - f''_{i+1}*h_i/6) * (x - x_i)
+    """
     if coordinate == 'z':
         spline_coeffs = spline_model['spline_z']
     else:
         spline_coeffs = spline_model['spline_y']
     
+    # Find the appropriate segment
     for seg in spline_coeffs:
         if seg['x_start'] <= x_value <= seg['x_end']:
-            dx = x_value - seg['x_start']
-            value = seg['a'] + seg['b']*dx + seg['c']*(dx**2) + seg['d']*(dx**3)
-            return value
+            return evaluate_cubic_spline_segment(x_value, seg)
     
+    # If beyond last segment, extrapolate using last segment
     if x_value > spline_coeffs[-1]['x_end']:
-        seg = spline_coeffs[-1]
-        dx = x_value - seg['x_start']
-        value = seg['a'] + seg['b']*dx + seg['c']*(dx**2) + seg['d']*(dx**3)
-        return value
+        return evaluate_cubic_spline_segment(x_value, spline_coeffs[-1])
+    
+    # If before first segment, use first segment
+    if x_value < spline_coeffs[0]['x_start']:
+        return evaluate_cubic_spline_segment(x_value, spline_coeffs[0])
     
     return None
+
+def evaluate_cubic_spline_segment(x_val, seg):
+    """
+    Evaluate cubic spline at a point using the mathematical formula
+    """
+    x_i = seg['x_start']
+    x_i1 = seg['x_end']
+    h = seg['h']
+    f_i = seg['f_i']
+    f_i1 = seg['f_i1']
+    fpp_i = seg['fpp_i']
+    fpp_i1 = seg['fpp_i1']
+    
+    # Apply the formula
+    term1 = fpp_i * ((x_i1 - x_val) ** 3) / (6 * h)
+    term2 = fpp_i1 * ((x_val - x_i) ** 3) / (6 * h)
+    term3 = (f_i / h - fpp_i * h / 6) * (x_i1 - x_val)
+    term4 = (f_i1 / h - fpp_i1 * h / 6) * (x_val - x_i)
+    
+    return term1 + term2 + term3 + term4
 
 def calculate_velocity_from_trajectory(trajectory):
     """
