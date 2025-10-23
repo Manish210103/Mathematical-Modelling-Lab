@@ -232,9 +232,9 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
     from plotly.subplots import make_subplots
     
     fig = make_subplots(
-        rows=1, cols=2,
-        subplot_titles=('Side View (X-Z)', 'Top View (X-Y)'),
-        specs=[[{'type': 'scatter'}, {'type': 'scatter'}]]
+        rows=1, cols=1,
+        subplot_titles=('Side View (X-Z)'),
+        specs=[[{'type': 'scatter'}]]
     )
     
     # Side view - tracked
@@ -248,15 +248,6 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
                       marker=dict(size=6)),
             row=1, col=1
         )
-        
-        # Top view - tracked
-        y_tracked = [p['y'] for p in tracked_trajectory]
-        fig.add_trace(
-            go.Scatter(x=x_tracked, y=y_tracked, mode='lines+markers',
-                      name='Tracked', line=dict(color='red', width=3),
-                      marker=dict(size=6), showlegend=False),
-            row=1, col=2
-        )
     
     # Side view - extrapolated
     if extrapolated_trajectory:
@@ -269,28 +260,15 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
                       marker=dict(size=5)),
             row=1, col=1
         )
-        
-        # Top view - extrapolated
-        y_extrap = [p['y'] for p in extrapolated_trajectory]
-        fig.add_trace(
-            go.Scatter(x=x_extrap, y=y_extrap, mode='lines+markers',
-                      name='Extrapolated', line=dict(color='blue', width=3, dash='dash'),
-                      marker=dict(size=5), showlegend=False),
-            row=1, col=2
-        )
     
     # Add stump line
     fig.add_hline(y=0.71, line_dash="dash", line_color="gold", 
                   annotation_text="Stump Height", row=1, col=1)
     fig.add_vline(x=20.0, line_dash="dash", line_color="gold",
                   annotation_text="Stumps", row=1, col=1)
-    fig.add_vline(x=20.0, line_dash="dash", line_color="gold",
-                  annotation_text="Stumps", row=1, col=2)
     
     fig.update_xaxes(title_text="Distance (m)", row=1, col=1)
     fig.update_yaxes(title_text="Height (m)", row=1, col=1)
-    fig.update_xaxes(title_text="Distance (m)", row=1, col=2)
-    fig.update_yaxes(title_text="Lateral (m)", row=1, col=2)
     
     fig.update_layout(height=400, showlegend=True)
     

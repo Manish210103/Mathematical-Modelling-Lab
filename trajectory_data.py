@@ -39,7 +39,7 @@ def generate_bouncing_trajectory(scenario_type, tracking_distance):
         # Bounces very close to batsman
         v_x = 25.0
         v_z_initial = 0.75
-        v_y_initial = 0.006
+        v_y_initial = 0.001
         bounce_coeff = 0.1
         expected_bounce = tracking_distance - 2.5
         
@@ -55,7 +55,7 @@ def generate_bouncing_trajectory(scenario_type, tracking_distance):
         # Medium bounce
         v_x = 19.0
         v_z_initial = -2.5
-        v_y_initial = 0.025
+        v_y_initial = 0
         bounce_coeff = 0.65
         expected_bounce = 8.0
     

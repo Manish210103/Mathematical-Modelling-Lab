@@ -125,28 +125,6 @@ def render_trajectory_analysis_page():
         st.metric("Distance Covered", f"{distance:.2f} m")
     
     # Fit spline and extrapolate
-    st.markdown("---")
-    st.subheader("Cubic Spline Fitting & Extrapolation to Stumps")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **Cubic Spline Interpolation:**
-        - Fits smooth curve through tracked points
-        - Natural cubic spline (zero 2nd derivative at endpoints)
-        - Each segment: S(x) = a + b(x-xᵢ) + c(x-xᵢ)² + d(x-xᵢ)³
-        """)
-    
-    with col2:
-        st.markdown("""
-        **Physics-Based Extrapolation:**
-        - Continues from last tracked point to stumps
-        - Projectile motion with gravity
-        - Air resistance and spin effects
-        - Maintains velocity continuity
-        """)
-    
     if st.button("Fit Spline & Extrapolate to Stumps", type="primary"):
         with st.spinner("Fitting cubic spline and extrapolating with physics..."):
             spline_model = fit_cubic_spline(trajectory)
@@ -188,9 +166,7 @@ def render_trajectory_analysis_page():
         
         with col1:
             df_extrap = pd.DataFrame(st.session_state.extrapolated[:])
-            st.dataframe(df_extrap, use_container_width=True)
-            st.caption("Extrapolated points - smooth parabolic curve from batsman to stumps")
-        
+            st.dataframe(df_extrap, use_container_width=True)        
         with col2:
             extrap_distance = st.session_state.extrapolated[-1]['x'] - trajectory[-1]['x']
             st.metric("Extrapolated Distance", f"{extrap_distance:.2f} m")
@@ -225,11 +201,6 @@ def render_lbw_decision_page():
     2. **IMPACT**: Ball impact with pad must be in-line with stumps (lateral position)
     3. **WICKETS**: Ball would go on to hit the stumps (height and position)
     4. **CONFIDENCE**: Decision requires >90% confidence (tracking accuracy)
-    
-    **Analysis Method:**
-    - Grey trajectory: Ball tracked from bowler (0m) to batsman
-    - Red trajectory: Extrapolated path from batsman to stumps (20m)
-    - All checks must pass AND confidence > 90% for OUT decision
     """)
     
     st.markdown("---")
@@ -268,10 +239,8 @@ def render_lbw_decision_page():
         with col2:
             if result['is_out']:
                 st.error("# 🚫 OUT LBW")
-                st.markdown(f"### Confidence: {result['confidence']:.1f}%")
             else:
                 st.success("# ✅ NOT OUT")
-                st.markdown(f"### Confidence: {result['confidence']:.1f}%")
             
             st.info(f"**Decision Reason:** {result['reason']}")
         
@@ -302,7 +271,7 @@ def render_lbw_decision_page():
         with col4:
             status = "✅ PASS" if checks['confidence_threshold'] else "❌ FAIL"
             st.metric("Confidence >90%", status)
-            st.caption("Required for OUT")
+            st.caption(f"Confidence: {result['confidence']:.1f}%")
         
         st.markdown("---")
         
@@ -372,16 +341,6 @@ def render_3d_visualization_page():
     st.header("Interactive 3D Ball Trajectory Visualization")
     
     trajectory = st.session_state.trajectory
-    
-    st.markdown("""
-    **Visualization Legend:**
-    - 🔴 **Red Solid Line**: Tracked trajectory (camera data from bowler to batsman)
-    - 🔵 **Blue Dashed Line**: Extrapolated smooth curve path (batsman to stumps)
-    - 🟡 **Yellow Lines**: Three stumps at 20m
-    - ⚪ **White Marker**: Batsman position
-    - 🔵 **Cyan Marker**: Bowler release point
-    - 🔴 **Red Diamond**: Impact point at stumps
-    """)
     
     st.markdown("---")
     
