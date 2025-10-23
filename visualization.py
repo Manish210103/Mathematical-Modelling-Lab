@@ -1,14 +1,10 @@
-"""
-3D Visualization module using Plotly
-"""
 import plotly.graph_objects as go
 
-def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spline_model=None):
-    """Create interactive 3D trajectory plot"""
+# Create interactive 3D trajectory plot
+def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spline_model=None, poly_model=None):
     
     fig = go.Figure()
     
-    # Tracked trajectory (RED solid line with markers)
     if tracked_trajectory:
         x_tracked = [p['x'] for p in tracked_trajectory]
         y_tracked = [p['y'] for p in tracked_trajectory]
@@ -25,7 +21,6 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
             hovertemplate='<b>Tracked</b><br>X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<extra></extra>'
         ))
     
-    # Extrapolated trajectory (BLUE dashed line)
     if extrapolated_trajectory:
         x_extrap = [p['x'] for p in extrapolated_trajectory]
         y_extrap = [p['y'] for p in extrapolated_trajectory]
@@ -36,13 +31,12 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
             y=y_extrap,
             z=z_extrap,
             mode='lines+markers',
-            name='Extrapolated (Newton-Gregory)',
+            name='Extrapolated (Physics)',
             line=dict(color='blue', width=8, dash='dash'),
             marker=dict(size=3, color='blue', opacity=0.6),
             hovertemplate='<b>Extrapolated</b><br>X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<extra></extra>'
         ))
     
-    # Spline fit visualization (GREEN line, if available)
     if spline_model and tracked_trajectory:
         from curve_fitting import evaluate_spline
         x_spline = []
@@ -73,8 +67,32 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
             opacity=0.7,
             hovertemplate='<b>Spline Fit</b><br>X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<extra></extra>'
         ))
+
+    if poly_model and tracked_trajectory:
+        from curve_fitting import evaluate_polynomial
+        x_poly, y_poly, z_poly = [], [], []
+        x_min = tracked_trajectory[0]['x']
+        x_max = tracked_trajectory[-1]['x']
+        x_range = x_max - x_min
+        for i in range(100):
+            x_val = x_min + (x_range * i / 99)
+            z_val = evaluate_polynomial(poly_model, x_val, 'z')
+            y_val = evaluate_polynomial(poly_model, x_val, 'y')
+            if z_val is not None and y_val is not None:
+                x_poly.append(x_val)
+                y_poly.append(y_val)
+                z_poly.append(z_val)
+        fig.add_trace(go.Scatter3d(
+            x=x_poly,
+            y=y_poly,
+            z=z_poly,
+            mode='lines',
+            name='Polynomial Fit',
+            line=dict(color='orange', width=4),
+            opacity=0.7,
+            hovertemplate='<b>Polynomial Fit</b><br>X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<extra></extra>'
+        ))
     
-    # Cricket pitch (green surface)
     fig.add_trace(go.Mesh3d(
         x=[0, 20, 20, 0],
         y=[-1.5, -1.5, 1.5, 1.5],
@@ -86,7 +104,6 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
         hoverinfo='skip'
     ))
     
-    # Stumps at 20m (3 yellow vertical lines)
     STUMP_X = 20.0
     STUMP_HEIGHT = 0.71
     stump_positions = [-0.114, 0, 0.114]  # Left, middle, right stumps
@@ -103,7 +120,6 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
             hovertemplate=f'<b>Stump</b><br>X: {STUMP_X}m<br>Height: {STUMP_HEIGHT}m<extra></extra>'
         ))
     
-    # Stump zone (semi-transparent box)
     stump_box_x = [STUMP_X]*8
     stump_box_y = [-0.15, 0.15, 0.15, -0.15, -0.15, 0.15, 0.15, -0.15]
     stump_box_z = [0, 0, 0, 0, STUMP_HEIGHT, STUMP_HEIGHT, STUMP_HEIGHT, STUMP_HEIGHT]
@@ -122,7 +138,6 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
         k=[2, 3, 0, 5, 6, 7, 4, 1, 5, 6, 7, 4]
     ))
     
-    # Batsman position marker
     if tracked_trajectory:
         batsman_x = tracked_trajectory[-1]['x']
         fig.add_trace(go.Scatter3d(
@@ -136,7 +151,6 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
             hovertemplate=f'<b>Batsman</b><br>X: {batsman_x:.1f}m<extra></extra>'
         ))
     
-    # Bowler position (at x=0)
     fig.add_trace(go.Scatter3d(
         x=[0, 0],
         y=[0, 0],
@@ -148,7 +162,6 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
         hovertemplate='<b>Bowler Release</b><br>X: 0m<extra></extra>'
     ))
     
-    # Impact point marker (if extrapolated to stumps)
     if extrapolated_trajectory:
         # Find impact point closest to stumps
         impact_point = None
@@ -173,7 +186,6 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
                 hovertemplate=f'<b>Impact Point</b><br>X: {impact_point["x"]:.3f}m<br>Y: {impact_point["y"]:.3f}m<br>Z: {impact_point["z"]:.3f}m<extra></extra>'
             ))
     
-    # Layout settings
     fig.update_layout(
         title={
             'text': 'Cricket Ball Trajectory Analysis - DRS System',
@@ -227,8 +239,8 @@ def create_trajectory_plot(tracked_trajectory, extrapolated_trajectory=None, spl
     
     return fig
 
+# Create 2D side view plots
 def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
-    """Create 2D side view and top view plots"""
     from plotly.subplots import make_subplots
     
     fig = make_subplots(
@@ -237,7 +249,6 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
         specs=[[{'type': 'scatter'}]]
     )
     
-    # Side view - tracked
     if tracked_trajectory:
         x_tracked = [p['x'] for p in tracked_trajectory]
         z_tracked = [p['z'] for p in tracked_trajectory]
@@ -249,7 +260,6 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
             row=1, col=1
         )
     
-    # Side view - extrapolated
     if extrapolated_trajectory:
         x_extrap = [p['x'] for p in extrapolated_trajectory]
         z_extrap = [p['z'] for p in extrapolated_trajectory]
@@ -261,7 +271,6 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
             row=1, col=1
         )
     
-    # Add stump line
     fig.add_hline(y=0.71, line_dash="dash", line_color="gold", 
                   annotation_text="Stump Height", row=1, col=1)
     fig.add_vline(x=20.0, line_dash="dash", line_color="gold",
@@ -272,4 +281,36 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
     
     fig.update_layout(height=400, showlegend=True)
     
+    return fig
+
+# Create risk-return scatter
+def create_risk_return_plot(points, frontier=None):
+    fig = go.Figure()
+    for p in points:
+        fig.add_trace(go.Scatter(
+            x=[p['risk']],
+            y=[p['ret']],
+            mode='markers+text',
+            text=[p['scenario']],
+            textposition='top center',
+            name=p['scenario'],
+            marker=dict(size=10)
+        ))
+    if frontier and len(frontier) >= 2:
+        xs = [r for r, m in frontier]
+        ys = [m for r, m in frontier]
+        fig.add_trace(go.Scatter(
+            x=xs,
+            y=ys,
+            mode='lines',
+            name='Frontier (2-scenario)',
+            line=dict(color='orange', dash='dash')
+        ))
+    fig.update_layout(
+        title='Risk-Return (Scenario Portfolio)',
+        xaxis_title='Risk (Std Dev of Proxy)',
+        yaxis_title='Return (Mean Proxy)',
+        template='plotly_dark',
+        height=450,
+    )
     return fig

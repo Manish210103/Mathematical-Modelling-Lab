@@ -1,15 +1,9 @@
-"""
-Extrapolation using velocity-based physics with improved cricket ball dynamics
-Continues ball path from batsman to stumps using realistic projectile motion
-Handles bouncing during extrapolation phase (e.g., yorker deliveries)
-Ensures smooth continuation from tracked trajectory with proper cricket physics
-NOW WITH CUBIC SPLINE EQUATION PRINTING
-"""
 from math_utils import sqrt
 import math
+from math_utils import mean
 
+ # Fit natural cubic spline to trajectory data
 def fit_cubic_spline(trajectory):
-    """Fit natural cubic spline to trajectory data"""
     n = len(trajectory)
     if n < 4:
         return None
@@ -30,42 +24,20 @@ def fit_cubic_spline(trajectory):
         'n_segments': n - 1
     }
 
+ # Compute natural cubic spline coefficients
 def compute_natural_cubic_spline(x, f):
-    """
-    Compute natural cubic spline coefficients using the mathematical formula:
-    
-    For i = 1, 2, ..., n-2:
-    a_i * f''_{i-1} + b_i * f''_i + c_i * f''_{i+1} = rhs_i
-    
-    Where:
-    - a_i = x_i - x_{i-1}
-    - b_i = 2(x_{i+1} - x_{i-1})
-    - c_i = x_{i+1} - x_i
-    - rhs_i = (6/(x_{i+1} - x_i))(f_{i+1} - f_i) - (6/(x_i - x_{i-1}))(f_i - f_{i-1})
-    
-    Boundary conditions: f''_0 = 0, f''_{n-1} = 0 (natural spline)
-    
-    Returns: (spline_coeffs, fpp) where fpp is list of second derivatives
-    """
+
     n = len(x)
-    
-    # Build tridiagonal system for f'' values
-    # For natural spline: f''_0 = 0, f''_{n-1} = 0
-    
-    # Number of unknowns: f''_1, f''_2, ..., f''_{n-2}
     num_unknowns = n - 2
     
     if num_unknowns <= 0:
-        # Not enough points, return simple linear interpolation
         return compute_simple_spline(x, f), [0.0] * n
     
-    # Initialize tridiagonal matrix components
     lower_diag = []  # a_i values
     main_diag = []   # b_i values
     upper_diag = []  # c_i values
     rhs = []         # right hand side values
     
-    # Build system of equations for i = 1, 2, ..., n-2
     for i in range(1, n - 1):
         a_i = x[i] - x[i - 1]
         b_i = 2 * (x[i + 1] - x[i - 1])
@@ -112,14 +84,8 @@ def compute_natural_cubic_spline(x, f):
     
     return spline_coeffs, fpp
 
+ # Solve tridiagonal system using Thomas algorithm
 def solve_tridiagonal_system(lower, main, upper, rhs):
-    """
-    Solve tridiagonal system using Thomas algorithm
-    lower: lower diagonal (a_i)
-    main: main diagonal (b_i)
-    upper: upper diagonal (c_i)
-    rhs: right hand side
-    """
     n = len(main)
     if n == 0:
         return []
@@ -149,8 +115,8 @@ def solve_tridiagonal_system(lower, main, upper, rhs):
     
     return solution
 
+ # Fallback simple linear spline when not enough points
 def compute_simple_spline(x, f):
-    """Fallback for when we don't have enough points"""
     spline_coeffs = []
     for i in range(len(x) - 1):
         spline_coeffs.append({
@@ -164,12 +130,8 @@ def compute_simple_spline(x, f):
         })
     return spline_coeffs
 
+ # Build human-readable text for spline equations
 def get_spline_equations_text(spline_model, coordinate='z'):
-    """
-    Generate human-readable equations for the cubic spline segments
-    
-    Returns a formatted string with all segment equations
-    """
     if not spline_model:
         return "No spline model available"
     
@@ -221,15 +183,8 @@ def get_spline_equations_text(spline_model, coordinate='z'):
     
     return equations_text
 
+ # Evaluate spline at x
 def evaluate_spline(spline_model, x_value, coordinate='z'):
-    """
-    Evaluate spline at given x value using the cubic spline formula:
-    
-    S_i(x) = f''_i * (x_{i+1} - x)^3 / (6*h_i) 
-           + f''_{i+1} * (x - x_i)^3 / (6*h_i)
-           + (f_i/h_i - f''_i*h_i/6) * (x_{i+1} - x)
-           + (f_{i+1}/h_i - f''_{i+1}*h_i/6) * (x - x_i)
-    """
     if coordinate == 'z':
         spline_coeffs = spline_model['spline_z']
     else:
@@ -250,10 +205,8 @@ def evaluate_spline(spline_model, x_value, coordinate='z'):
     
     return None
 
+ # Evaluate a cubic spline segment at a point
 def evaluate_cubic_spline_segment(x_val, seg):
-    """
-    Evaluate cubic spline at a point using the mathematical formula
-    """
     x_i = seg['x_start']
     x_i1 = seg['x_end']
     h = seg['h']
@@ -270,12 +223,8 @@ def evaluate_cubic_spline_segment(x_val, seg):
     
     return term1 + term2 + term3 + term4
 
+ # Estimate velocity at last tracked point (weighted recent points)
 def calculate_velocity_from_trajectory(trajectory):
-    """
-    Calculate ball velocity at last tracked point
-    Uses weighted average of last 5-8 points for accurate velocity estimation
-    Gives more weight to recent points
-    """
     n = len(trajectory)
     if n < 3:
         return None
@@ -320,19 +269,8 @@ def calculate_velocity_from_trajectory(trajectory):
         'vz': avg_vz
     }
 
+ # Detect ground hit and apply bounce physics
 def detect_bounce_and_apply_physics(z_current, z_new, vz, bounce_state):
-    """
-    Detect if ball hits ground and apply bounce physics
-    
-    Args:
-        z_current: Current Z position
-        z_new: New Z position (may be below ground)
-        vz: Current vertical velocity
-        bounce_state: Dict tracking bounce information
-    
-    Returns:
-        tuple: (z_final, vz_final, bounce_occurred, bounce_state)
-    """
     GROUND_THRESHOLD = 0.02  # Consider ground contact if z < 2cm
     
     # Check if ball crosses ground level
@@ -377,33 +315,8 @@ def detect_bounce_and_apply_physics(z_current, z_new, vz, bounce_state):
         # No bounce, normal trajectory
         return z_new, vz, False, bounce_state
 
+ # Physics-based extrapolation from batsman to stumps with bounce handling
 def extrapolate_to_stumps(spline_model, trajectory, stump_x=20.0):
-    """
-    Extrapolate ball path from batsman to stumps using realistic cricket physics
-    NOW WITH BOUNCE DETECTION AND HANDLING!
-    
-    Key improvements:
-    1. Detects ground impact during extrapolation (e.g., yorker deliveries)
-    2. Applies bounce physics with realistic coefficient of restitution
-    3. Proper velocity calculation using multiple points
-    4. Realistic gravity effect (dramatic Z change)
-    5. Minimal lateral deviation (small Y change)
-    6. Air resistance proportional to velocity squared
-    7. Smooth parabolic descent with bounce handling
-    
-    Physics Model:
-    - X-axis: Constant horizontal velocity (minimal air resistance)
-    - Z-axis: Strong gravity effect + air resistance + BOUNCE HANDLING
-    - Y-axis: Minimal spin/drift effect (SMALL change)
-    
-    Args:
-        spline_model: Fitted spline (unused for extrapolation, kept for interface)
-        trajectory: Tracked trajectory data
-        stump_x: Position of stumps (20.0m)
-    
-    Returns:
-        List of extrapolated points with realistic cricket ball physics including bounces
-    """
     if not trajectory or len(trajectory) < 3:
         return []
     
@@ -586,8 +499,8 @@ def extrapolate_to_stumps(spline_model, trajectory, stump_x=20.0):
     
     return extrapolated
 
+ # Calculate RMSE of spline fit
 def calculate_rmse(trajectory, spline_model):
-    """Calculate RMSE of spline fit"""
     errors_z = []
     errors_y = []
     
@@ -608,3 +521,400 @@ def calculate_rmse(trajectory, spline_model):
     rmse_y = sqrt(sum(errors_y) / len(errors_y)) if errors_y else 0
     
     return {'rmse_z': rmse_z, 'rmse_y': rmse_y}
+
+# ================================
+# Polynomial Interpolation/Regression
+# ================================
+
+ # Build Vandermonde matrix
+def _design_matrix(x_values, degree):
+    return [[(x ** p) for p in range(degree + 1)] for x in x_values]
+
+ # Solve linear system by Gaussian elimination with partial pivoting
+def _gaussian_elimination_solve(A, b):
+    n = len(A)
+    # Build augmented matrix
+    M = [row[:] + [b[i]] for i, row in enumerate(A)]
+    # Forward elimination with partial pivoting
+    for k in range(n):
+        # Pivot
+        pivot_row = max(range(k, n), key=lambda r: abs(M[r][k]))
+        if abs(M[pivot_row][k]) < 1e-12:
+            # Singular; fall back to zeros
+            return [0.0] * n
+        if pivot_row != k:
+            M[k], M[pivot_row] = M[pivot_row], M[k]
+        # Eliminate
+        for i in range(k + 1, n):
+            factor = M[i][k] / M[k][k]
+            for j in range(k, n + 1):
+                M[i][j] -= factor * M[k][j]
+    # Back substitution
+    x = [0.0] * n
+    for i in range(n - 1, -1, -1):
+        s = M[i][n]
+        for j in range(i + 1, n):
+            s -= M[i][j] * x[j]
+        x[i] = s / M[i][i]
+    return x
+
+ # Compute normal equations (X^T X, X^T y)
+def _normal_equations(X, y):
+    m = len(X[0])  # number of features
+    # XTX
+    XTX = [[0.0 for _ in range(m)] for _ in range(m)]
+    XTy = [0.0 for _ in range(m)]
+    for i in range(len(X)):
+        row = X[i]
+        yi = y[i]
+        for a in range(m):
+            XTy[a] += row[a] * yi
+            ra = row[a]
+            for b in range(m):
+                XTX[a][b] += ra * row[b]
+    return XTX, XTy
+
+ # Fit polynomial (least squares) to y(x) and z(x)
+def fit_polynomial(trajectory, degree=3):
+    if not trajectory or len(trajectory) < degree + 1:
+        return None
+    x_vals = [p['x'] for p in trajectory]
+    y_vals = [p['y'] for p in trajectory]
+    z_vals = [p['z'] for p in trajectory]
+    X = _design_matrix(x_vals, degree)
+    # Solve for z(x)
+    XTX_z, XTy_z = _normal_equations(X, z_vals)
+    coeffs_z = _gaussian_elimination_solve(XTX_z, XTy_z)
+    # Solve for y(x)
+    XTX_y, XTy_y = _normal_equations(X, y_vals)
+    coeffs_y = _gaussian_elimination_solve(XTX_y, XTy_y)
+    return {
+        'type': 'polynomial',
+        'degree': degree,
+        'coeffs_z': coeffs_z,  # c0 + c1 x + ...
+        'coeffs_y': coeffs_y,
+        'x_min': min(x_vals),
+        'x_max': max(x_vals)
+    }
+
+ # Evaluate polynomial model at x for z or y
+def evaluate_polynomial(poly_model, x_value, coordinate='z'):
+    if not poly_model:
+        return None
+    coeffs = poly_model['coeffs_z'] if coordinate == 'z' else poly_model['coeffs_y']
+    # Horner's method
+    val = 0.0
+    for c in reversed(coeffs):
+        val = val * x_value + c
+    return val
+
+ # Compute error metrics for z and y
+def _calc_errors(trajectory, predictor_fn):
+    z_actuals, z_preds = [], []
+    y_actuals, y_preds = [], []
+    for p in trajectory:
+        x = p['x']
+        z_a = p['z']
+        y_a = p['y']
+        z_p, y_p = predictor_fn(x)
+        if z_p is not None:
+            z_actuals.append(z_a)
+            z_preds.append(z_p)
+        if y_p is not None:
+            y_actuals.append(y_a)
+            y_preds.append(y_p)
+    def _metrics(actuals, preds):
+        if not actuals:
+            return {'rmse': 0.0, 'mae': 0.0, 'r2': 0.0}
+        n = len(actuals)
+        sq = [(a - p) ** 2 for a, p in zip(actuals, preds)]
+        ab = [abs(a - p) for a, p in zip(actuals, preds)]
+        rmse = sqrt(sum(sq) / n)
+        mae = sum(ab) / n
+        mu = mean(actuals)
+        ss_res = sum(sq)
+        ss_tot = sum((a - mu) ** 2 for a in actuals) or 1e-12
+        r2 = 1.0 - ss_res / ss_tot
+        return {'rmse': rmse, 'mae': mae, 'r2': r2}
+    return {
+        'z': _metrics(z_actuals, z_preds),
+        'y': _metrics(y_actuals, y_preds),
+        'n': len(z_actuals)
+    }
+
+ # Compute RMSE/MAE/R2 for spline fit
+def statistics_for_spline(trajectory, spline_model):
+    def predictor(x):
+        return evaluate_spline(spline_model, x, 'z'), evaluate_spline(spline_model, x, 'y')
+    stats = _calc_errors(trajectory, predictor)
+    stats['aic'] = None
+    stats['bic'] = None
+    stats['model_type'] = 'spline'
+    return stats
+
+ # Compute RMSE/MAE/R2 and AIC/BIC for polynomial fit
+def statistics_for_polynomial(trajectory, poly_model):
+    def predictor(x):
+        return evaluate_polynomial(poly_model, x, 'z'), evaluate_polynomial(poly_model, x, 'y')
+    stats = _calc_errors(trajectory, predictor)
+    # Use z-dimension errors for information criteria (primary vertical fit)
+    n = stats['n'] if stats['n'] else len(trajectory)
+    k = poly_model['degree'] + 1
+    # Residual sum of squares (use z)
+    rss_z = (stats['z']['rmse'] ** 2) * n
+    if rss_z <= 0:
+        rss_z = 1e-12
+    # AIC/BIC for Gaussian errors: AIC = n*ln(RSS/n) + 2k ; BIC = n*ln(RSS/n) + k*ln(n)
+    aic = n * math.log(rss_z / n) + 2 * k
+    bic = n * math.log(rss_z / n) + k * math.log(max(n, 1))
+    stats['aic'] = aic
+    stats['bic'] = bic
+    stats['model_type'] = 'polynomial'
+    return stats
+
+ # Select best model comparing spline vs polynomial
+def select_best_model(spline_stats, poly_stats):
+    best = 'spline'
+    reason = []
+    # Compare RMSE in Z (primary physics dimension)
+    if poly_stats['z']['rmse'] + 1e-9 < spline_stats['z']['rmse']:
+        best = 'polynomial'
+        reason.append('Lower RMSE (Z)')
+    elif spline_stats['z']['rmse'] + 1e-9 < poly_stats['z']['rmse']:
+        best = 'spline'
+        reason.append('Lower RMSE (Z)')
+    else:
+        # tie-breaker with R2
+        if poly_stats['z']['r2'] > spline_stats['z']['r2'] + 1e-9:
+            best = 'polynomial'
+            reason.append('Higher R² (Z)')
+        elif spline_stats['z']['r2'] > poly_stats['z']['r2'] + 1e-9:
+            best = 'spline'
+            reason.append('Higher R² (Z)')
+        else:
+            # tie-breaker with MAE
+            if poly_stats['z']['mae'] < spline_stats['z']['mae']:
+                best = 'polynomial'
+                reason.append('Lower MAE (Z)')
+            else:
+                best = 'spline'
+                reason.append('Lower MAE (Z)')
+    # If polynomial provides AIC/BIC improvements, mention
+    if best == 'polynomial' and poly_stats.get('aic') is not None:
+        reason.append('Better information criteria (AIC/BIC)')
+    return {'best': best, 'reason': ', '.join(reason)}
+
+ # Build human-readable polynomial equation string
+def get_polynomial_equation_text(poly_model, coordinate='z'):
+    if not poly_model:
+        return 'No polynomial model available'
+    deg = poly_model['degree']
+    coeffs = poly_model['coeffs_z'] if coordinate == 'z' else poly_model['coeffs_y']
+    terms = []
+    for p, c in enumerate(coeffs):
+        if abs(c) < 1e-12:
+            continue
+        if p == 0:
+            terms.append(f"{c:.6f}")
+        elif p == 1:
+            terms.append(f"{c:.6f}·x")
+        else:
+            terms.append(f"{c:.6f}·x^{p}")
+    eq = " + ".join(terms) if terms else "0"
+    coord_name = 'Z (Height)' if coordinate == 'z' else 'Y (Lateral)'
+    return f"Polynomial Degree {deg} for {coord_name}:\n  f(x) = {eq}"
+
+# ================================
+# Newton-Gregory Forward Interpolation (uniform spacing)
+# and Lagrange Interpolation (general)
+# ================================
+
+def _is_uniform_spacing(x, tol=1e-4):
+    if len(x) < 2:
+        return False, 0.0
+    hs = [x[i+1] - x[i] for i in range(len(x)-1)]
+    h0 = hs[0]
+    for h in hs[1:]:
+        if abs(h - h0) > tol:
+            return False, h0
+    return True, h0
+
+def build_newton_forward_model(x, f, max_order=None):
+    n = len(x)
+    if n == 0:
+        return None
+    ok, h = _is_uniform_spacing(x)
+    if not ok:
+        return None
+    # forward differences table
+    diffs = []
+    diffs.append([val for val in f])
+    for order in range(1, n):
+        prev = diffs[-1]
+        diffs.append([prev[i+1] - prev[i] for i in range(len(prev)-1)])
+    degree = max_order if (max_order is not None) else (n-1)
+    degree = max(0, min(degree, n-1))
+    return {
+        'type': 'newton_forward',
+        'x0': x[0],
+        'h': h,
+        'degree': degree,
+        'diffs': diffs,
+        'x_points': x
+    }
+
+def _falling_factorial(u, k):
+    val = 1.0
+    for i in range(k):
+        val *= (u - i)
+    return val
+
+def _fact(k):
+    v = 1
+    for i in range(2, k+1):
+        v *= i
+    return v
+
+def evaluate_newton_forward(model, x_val):
+    if not model:
+        return None
+    u = (x_val - model['x0']) / model['h']
+    s = 0.0
+    for k in range(model['degree'] + 1):
+        term = model['diffs'][k][0] if k < len(model['diffs']) else 0.0
+        if k == 0:
+            s += term
+        else:
+            s += (_falling_factorial(u, k) / _fact(k)) * term
+    return s
+
+def get_newton_forward_table_text(model):
+    if not model:
+        return 'Newton-Gregory model unavailable (requires uniform spacing)'
+    lines = []
+    lines.append('Forward Difference Table:')
+    x_vals = model['x_points']
+    max_rows = len(x_vals)
+    for i in range(max_rows):
+        row = [f"x={x_vals[i]:.5f}"]
+        for k in range(len(model['diffs'])):
+            if i < len(model['diffs'][k]):
+                row.append(f"Δ^{k}f={model['diffs'][k][i]:.6f}")
+        lines.append('  ' + ' | '.join(row))
+    return "\n".join(lines)
+
+def get_newton_forward_polynomial_text(model):
+    if not model:
+        return 'No Newton-Gregory polynomial (non-uniform spacing)'
+    parts = [f"f(x) = f(x0) + "]
+    h = model['h']
+    lines = [f"x0={model['x0']:.6f}, h={h:.6f}"]
+    terms = []
+    for k in range(model['degree'] + 1):
+        coef = model['diffs'][k][0]
+        if k == 0:
+            terms.append(f"{coef:.6f}")
+        else:
+            terms.append(f"(Δ^{k}f0/{k}!)·u(u-1)...(u-{k-1})")
+    eq = " + ".join(terms)
+    lines.append("Using u = (x - x0)/h")
+    lines.append(eq)
+    return "\n".join(lines)
+
+def build_lagrange_model(x, f, degree):
+    m = len(x)
+    if m == 0:
+        return None
+    deg = max(0, min(degree, m-1))
+    pts = deg + 1
+    xs = x[-pts:]
+    fs = f[-pts:]
+    return {'type': 'lagrange', 'x': xs, 'f': fs, 'degree': deg}
+
+def evaluate_lagrange(model, x_val):
+    if not model:
+        return None
+    xs = model['x']
+    fs = model['f']
+    n = len(xs)
+    s = 0.0
+    for i in range(n):
+        li = 1.0
+        xi = xs[i]
+        for j in range(n):
+            if j == i:
+                continue
+            xj = xs[j]
+            denom = (xi - xj) if (xi - xj) != 0 else 1e-12
+            li *= (x_val - xj) / denom
+        s += fs[i] * li
+    return s
+
+def get_lagrange_polynomial_text(model):
+    if not model:
+        return 'No Lagrange model available'
+    xs = model['x']
+    fs = model['f']
+    lines = [f"Lagrange polynomial (degree {model['degree']}):"]
+    parts = []
+    for i in range(len(xs)):
+        numer = []
+        denom = 1.0
+        for j in range(len(xs)):
+            if j == i:
+                continue
+            numer.append(f"(x - {xs[j]:.6f})")
+            denom *= (xs[i] - xs[j]) if (xs[i] - xs[j]) != 0 else 1e-12
+        parts.append(f"{fs[i]:.6f} · [ {' · '.join(numer)} ] / {denom:.6f}")
+    lines.append(" + \n".join(parts))
+    return "\n".join(lines)
+
+def _trajectory_xy(trajectory, coord):
+    x_vals = [p['x'] for p in trajectory]
+    y_vals = [p[coord] for p in trajectory]
+    return x_vals, y_vals
+
+def build_newton_models_for_trajectory(trajectory, max_order=None):
+    x, z = _trajectory_xy(trajectory, 'z')
+    _, y = _trajectory_xy(trajectory, 'y')
+    z_model = build_newton_forward_model(x, z, max_order)
+    y_model = build_newton_forward_model(x, y, max_order)
+    return {'z': z_model, 'y': y_model}
+
+def build_lagrange_models_for_trajectory(trajectory, degree):
+    x, z = _trajectory_xy(trajectory, 'z')
+    _, y = _trajectory_xy(trajectory, 'y')
+    z_model = build_lagrange_model(x, z, degree)
+    y_model = build_lagrange_model(x, y, degree)
+    return {'z': z_model, 'y': y_model}
+
+def extrapolate_to_stumps_interpolated(trajectory, stump_x, method='newton', degree=3, step=0.04):
+    if not trajectory:
+        return []
+    x0 = trajectory[-1]['x']
+    if x0 >= stump_x - 0.0001:
+        return []
+    points = []
+    if method == 'newton':
+        models = build_newton_models_for_trajectory(trajectory, max_order=degree)
+        z_model, y_model = models['z'], models['y']
+        if not z_model or not y_model:
+            models = build_lagrange_models_for_trajectory(trajectory, degree)
+            z_model, y_model = models['z'], models['y']
+            method = 'lagrange'
+        x_curr = x0
+        while x_curr <= stump_x + 1e-9:
+            z_val = evaluate_newton_forward(z_model, x_curr) if method == 'newton' else evaluate_lagrange(z_model, x_curr)
+            y_val = evaluate_newton_forward(y_model, x_curr) if method == 'newton' else evaluate_lagrange(y_model, x_curr)
+            points.append({'x': round(x_curr, 3), 'y': round(y_val, 4), 'z': round(max(0.0, z_val), 3), 't': None, 'bounced': False})
+            x_curr += step
+    else:
+        models = build_lagrange_models_for_trajectory(trajectory, degree)
+        z_model, y_model = models['z'], models['y']
+        x_curr = x0
+        while x_curr <= stump_x + 1e-9:
+            z_val = evaluate_lagrange(z_model, x_curr)
+            y_val = evaluate_lagrange(y_model, x_curr)
+            points.append({'x': round(x_curr, 3), 'y': round(y_val, 4), 'z': round(max(0.0, z_val), 3), 't': None, 'bounced': False})
+            x_curr += step
+    return points
