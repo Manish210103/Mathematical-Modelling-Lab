@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 try:
-    from scipy.stats import f as scipy_f_dist  # Optional, used for p-values
+    from scipy.stats import f as scipy_f_dist
 except Exception:
     scipy_f_dist = None
 
@@ -14,12 +14,9 @@ from curve_fitting import (fit_cubic_spline, extrapolate_to_stumps,
                            fit_polynomial, statistics_for_spline,
                            statistics_for_polynomial, select_best_model,
                            get_polynomial_equation_text,
-                           build_newton_models_for_trajectory,
                            build_lagrange_models_for_trajectory,
-                           get_newton_forward_table_text,
-                           get_newton_forward_polynomial_text,
                            get_lagrange_polynomial_text,
-                           extrapolate_to_stumps_interpolated)
+                           evaluate_lagrange)
 from lbw_analysis import calculate_lbw_decision, analyze_ball_path
 from visualization import create_trajectory_plot, create_2d_plots
 from math_utils import mean, std_deviation
@@ -99,16 +96,15 @@ def main():
     elif page == "Advanced Analysis":
         render_advanced_analysis_page()
 
- # Trajectory analysis page
 def render_trajectory_analysis_page():
     st.header("Ball Trajectory Analysis")
-    
+
     trajectory = st.session_state.trajectory
     scenario_info = get_available_scenarios()
     # Initialize placeholders; will refresh after fitting block
     poly = st.session_state.get('poly_model')
     stats = st.session_state.get('model_stats')
-    
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.info(f"**Delivery Type:**\n{scenario_info[st.session_state.scenario_type]}")
@@ -116,31 +112,31 @@ def render_trajectory_analysis_page():
         st.info(f"**Tracked Distance:**\n{st.session_state.tracking_distance}m")
     with col3:
         st.info(f"**Tracked Points:**\n{len(trajectory)} points")
-    
+
     st.markdown("---")
-    
+
     st.subheader("Tracked Trajectory Statistics")
-    
+
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         max_height = max([p['z'] for p in trajectory])
         st.metric("Max Height", f"{max_height:.2f} m")
-    
+
     with col2:
         max_lateral = max([abs(p['y']) for p in trajectory])
         st.metric("Max Lateral Dev.", f"{max_lateral:.3f} m")
-    
+
     with col3:
         duration = trajectory[-1]['t'] if trajectory else 0
         st.metric("Duration", f"{duration:.3f} s")
-    
+
     with col4:
         distance = trajectory[-1]['x'] if trajectory else 0
         st.metric("Distance Covered", f"{distance:.2f} m")
-    
+
     degree = st.slider("Polynomial Degree", min_value=1, max_value=6, value=3, step=1,
-                       help="Degree for polynomial least-squares fit of y(x) and z(x)")
+                        help="Degree for polynomial least-squares fit of y(x) and z(x)")
     if st.button("Fit Spline + Polynomial & Extrapolate", type="primary"):
         with st.spinner("Fitting cubic spline and extrapolating with physics..."):
             spline_model = fit_cubic_spline(trajectory)
@@ -163,7 +159,7 @@ def render_trajectory_analysis_page():
 
             st.success("✅ Models fitted successfully!")
             st.success(f"✅ Extrapolated {len(extrapolated)} points to stumps")
-    
+
     if st.session_state.spline_model:
         st.markdown("---")
         st.subheader("Model Details and Comparison")
@@ -210,6 +206,16 @@ def render_trajectory_analysis_page():
                     st.code(get_polynomial_equation_text(poly, 'y'), language='text')
                 else:
                     st.info("Polynomial not fitted yet.")
+
+        with st.expander("Interpolation (Lagrange)", expanded=False):
+            max_deg = max(1, min(6, len(trajectory) - 1))
+            fixed_deg = 2 if max_deg >= 2 else 1
+            models_lagr = build_lagrange_models_for_trajectory(trajectory, degree=fixed_deg)
+            tabs_interp = st.tabs(["Lagrange Z Poly", "Lagrange Y Poly"])
+            with tabs_interp[0]:
+                st.code(get_lagrange_polynomial_text(models_lagr['z']), language='text')
+            with tabs_interp[1]:
+                st.code(get_lagrange_polynomial_text(models_lagr['y']), language='text')
 
         if stats and stats['comparison']:
             st.markdown("---")
@@ -328,7 +334,7 @@ def render_trajectory_analysis_page():
                     pass
         else:
             st.info("Polynomial model not fitted yet. Use the button above to fit the model.")
-    
+
     if st.session_state.extrapolated:
         st.markdown("---")
         st.subheader("Extrapolated Points (Physics-Based)")
@@ -352,7 +358,6 @@ def render_trajectory_analysis_page():
         fig_2d = create_2d_plots(trajectory, st.session_state.extrapolated)
         st.plotly_chart(fig_2d, use_container_width=True)
 
- # LBW decision page
 def render_lbw_decision_page():
     st.header("LBW (Leg Before Wicket) Decision System")
     
@@ -499,7 +504,6 @@ def render_lbw_decision_page():
             with col4:
                 st.metric("Lateral Variation", f"{path['lateral_variation']:.3f} m")
             
- # 3D visualization page
 def render_3d_visualization_page():
     st.header("Interactive 3D Ball Trajectory Visualization")
     
@@ -537,7 +541,6 @@ def render_3d_visualization_page():
     with col4:
         distance = trajectory[-1]['x']
         st.metric("Tracking Distance", f"{distance:.2f} m")
- # Advanced analysis page
 def render_advanced_analysis_page():
 
     if not st.session_state.get("trajectory"):

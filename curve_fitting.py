@@ -33,10 +33,10 @@ def compute_natural_cubic_spline(x, f):
     if num_unknowns <= 0:
         return compute_simple_spline(x, f), [0.0] * n
     
-    lower_diag = []  # a_i values
-    main_diag = []   # b_i values
-    upper_diag = []  # c_i values
-    rhs = []         # right hand side values
+    lower_diag = []  
+    main_diag = []   
+    upper_diag = []  
+    rhs = []         
     
     for i in range(1, n - 1):
         a_i = x[i] - x[i - 1]
@@ -70,8 +70,6 @@ def compute_natural_cubic_spline(x, f):
     for i in range(n - 1):
         h_i = x[i + 1] - x[i]
         
-        # Calculate coefficients for cubic polynomial
-        # We'll store them in a way that allows easy evaluation
         spline_coeffs.append({
             'x_start': x[i],
             'x_end': x[i + 1],
@@ -271,31 +269,21 @@ def calculate_velocity_from_trajectory(trajectory):
 
  # Detect ground hit and apply bounce physics
 def detect_bounce_and_apply_physics(z_current, z_new, vz, bounce_state):
-    GROUND_THRESHOLD = 0.02  # Consider ground contact if z < 2cm
-    
-    # Check if ball crosses ground level
+    GROUND_THRESHOLD = 0.02  
+        
     if z_new <= GROUND_THRESHOLD and z_current > GROUND_THRESHOLD:
-        # Ball just hit the ground - BOUNCE!
         bounce_occurred = True
         
-        # Determine bounce coefficient based on delivery characteristics
-        # Yorkers and full tosses have less energy, bounce less
         if bounce_state['bounce_count'] == 0:
-            # First bounce in extrapolation
             if abs(vz) < 3.0:
-                # Slow/yorker delivery
                 BOUNCE_COEFF = 0.45
             elif abs(vz) < 6.0:
-                # Normal delivery
                 BOUNCE_COEFF = 0.55
             else:
-                # High-speed delivery
                 BOUNCE_COEFF = 0.65
         else:
-            # Subsequent bounces have less energy
             BOUNCE_COEFF = 0.40
         
-        # Apply bounce: reverse vertical velocity and reduce magnitude
         vz_final = -vz * BOUNCE_COEFF
         z_final = GROUND_THRESHOLD  # Place ball just on ground
         
@@ -724,103 +712,6 @@ def get_polynomial_equation_text(poly_model, coordinate='z'):
     coord_name = 'Z (Height)' if coordinate == 'z' else 'Y (Lateral)'
     return f"Polynomial Degree {deg} for {coord_name}:\n  f(x) = {eq}"
 
-# ================================
-# Newton-Gregory Forward Interpolation (uniform spacing)
-# and Lagrange Interpolation (general)
-# ================================
-
-def _is_uniform_spacing(x, tol=1e-4):
-    if len(x) < 2:
-        return False, 0.0
-    hs = [x[i+1] - x[i] for i in range(len(x)-1)]
-    h0 = hs[0]
-    for h in hs[1:]:
-        if abs(h - h0) > tol:
-            return False, h0
-    return True, h0
-
-def build_newton_forward_model(x, f, max_order=None):
-    n = len(x)
-    if n == 0:
-        return None
-    ok, h = _is_uniform_spacing(x)
-    if not ok:
-        return None
-    # forward differences table
-    diffs = []
-    diffs.append([val for val in f])
-    for order in range(1, n):
-        prev = diffs[-1]
-        diffs.append([prev[i+1] - prev[i] for i in range(len(prev)-1)])
-    degree = max_order if (max_order is not None) else (n-1)
-    degree = max(0, min(degree, n-1))
-    return {
-        'type': 'newton_forward',
-        'x0': x[0],
-        'h': h,
-        'degree': degree,
-        'diffs': diffs,
-        'x_points': x
-    }
-
-def _falling_factorial(u, k):
-    val = 1.0
-    for i in range(k):
-        val *= (u - i)
-    return val
-
-def _fact(k):
-    v = 1
-    for i in range(2, k+1):
-        v *= i
-    return v
-
-def evaluate_newton_forward(model, x_val):
-    if not model:
-        return None
-    u = (x_val - model['x0']) / model['h']
-    s = 0.0
-    for k in range(model['degree'] + 1):
-        term = model['diffs'][k][0] if k < len(model['diffs']) else 0.0
-        if k == 0:
-            s += term
-        else:
-            s += (_falling_factorial(u, k) / _fact(k)) * term
-    return s
-
-def get_newton_forward_table_text(model):
-    if not model:
-        return 'Newton-Gregory model unavailable (requires uniform spacing)'
-    lines = []
-    lines.append('Forward Difference Table:')
-    x_vals = model['x_points']
-    max_rows = len(x_vals)
-    for i in range(max_rows):
-        row = [f"x={x_vals[i]:.5f}"]
-        for k in range(len(model['diffs'])):
-            if i < len(model['diffs'][k]):
-                row.append(f"Δ^{k}f={model['diffs'][k][i]:.6f}")
-        lines.append('  ' + ' | '.join(row))
-    return "\n".join(lines)
-
-def get_newton_forward_polynomial_text(model):
-    if not model:
-        return 'No Newton-Gregory polynomial (non-uniform spacing)'
-    parts = [f"f(x) = f(x0) + "]
-    h = model['h']
-    lines = [f"x0={model['x0']:.6f}, h={h:.6f}"]
-    terms = []
-    for k in range(model['degree'] + 1):
-        coef = model['diffs'][k][0]
-        if k == 0:
-            terms.append(f"{coef:.6f}")
-        else:
-            terms.append(f"(Δ^{k}f0/{k}!)·u(u-1)...(u-{k-1})")
-    eq = " + ".join(terms)
-    lines.append("Using u = (x - x0)/h")
-    lines.append(eq)
-    return "\n".join(lines)
-
 def build_lagrange_model(x, f, degree):
     m = len(x)
     if m == 0:
@@ -874,47 +765,9 @@ def _trajectory_xy(trajectory, coord):
     y_vals = [p[coord] for p in trajectory]
     return x_vals, y_vals
 
-def build_newton_models_for_trajectory(trajectory, max_order=None):
-    x, z = _trajectory_xy(trajectory, 'z')
-    _, y = _trajectory_xy(trajectory, 'y')
-    z_model = build_newton_forward_model(x, z, max_order)
-    y_model = build_newton_forward_model(x, y, max_order)
-    return {'z': z_model, 'y': y_model}
-
 def build_lagrange_models_for_trajectory(trajectory, degree):
     x, z = _trajectory_xy(trajectory, 'z')
     _, y = _trajectory_xy(trajectory, 'y')
     z_model = build_lagrange_model(x, z, degree)
     y_model = build_lagrange_model(x, y, degree)
     return {'z': z_model, 'y': y_model}
-
-def extrapolate_to_stumps_interpolated(trajectory, stump_x, method='newton', degree=3, step=0.04):
-    if not trajectory:
-        return []
-    x0 = trajectory[-1]['x']
-    if x0 >= stump_x - 0.0001:
-        return []
-    points = []
-    if method == 'newton':
-        models = build_newton_models_for_trajectory(trajectory, max_order=degree)
-        z_model, y_model = models['z'], models['y']
-        if not z_model or not y_model:
-            models = build_lagrange_models_for_trajectory(trajectory, degree)
-            z_model, y_model = models['z'], models['y']
-            method = 'lagrange'
-        x_curr = x0
-        while x_curr <= stump_x + 1e-9:
-            z_val = evaluate_newton_forward(z_model, x_curr) if method == 'newton' else evaluate_lagrange(z_model, x_curr)
-            y_val = evaluate_newton_forward(y_model, x_curr) if method == 'newton' else evaluate_lagrange(y_model, x_curr)
-            points.append({'x': round(x_curr, 3), 'y': round(y_val, 4), 'z': round(max(0.0, z_val), 3), 't': None, 'bounced': False})
-            x_curr += step
-    else:
-        models = build_lagrange_models_for_trajectory(trajectory, degree)
-        z_model, y_model = models['z'], models['y']
-        x_curr = x0
-        while x_curr <= stump_x + 1e-9:
-            z_val = evaluate_lagrange(z_model, x_curr)
-            y_val = evaluate_lagrange(y_model, x_curr)
-            points.append({'x': round(x_curr, 3), 'y': round(y_val, 4), 'z': round(max(0.0, z_val), 3), 't': None, 'bounced': False})
-            x_curr += step
-    return points
