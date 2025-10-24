@@ -1,6 +1,12 @@
 import streamlit as st
 import math
 import pandas as pd
+import plotly.graph_objects as go
+
+try:
+    from scipy.stats import f as scipy_f_dist  # Optional, used for p-values
+except Exception:
+    scipy_f_dist = None
 
 from trajectory_data import generate_bouncing_trajectory, get_available_scenarios
 from curve_fitting import (fit_cubic_spline, extrapolate_to_stumps, 
@@ -99,6 +105,9 @@ def render_trajectory_analysis_page():
     
     trajectory = st.session_state.trajectory
     scenario_info = get_available_scenarios()
+    # Initialize placeholders; will refresh after fitting block
+    poly = st.session_state.get('poly_model')
+    stats = st.session_state.get('model_stats')
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -159,9 +168,10 @@ def render_trajectory_analysis_page():
         st.markdown("---")
         st.subheader("Model Details and Comparison")
         
+        # Refresh latest models to reflect the just-fitted state in this same run
         spline = st.session_state.spline_model
-        poly = st.session_state.poly_model
-        stats = st.session_state.model_stats
+        poly = st.session_state.get('poly_model')
+        stats = st.session_state.get('model_stats')
         
         col1, col2, col3 = st.columns(3)
         
@@ -217,46 +227,107 @@ def render_trajectory_analysis_page():
                     st.metric("Poly R² (Z)", f"{stats['polynomial']['z']['r2']:.4f}")
                 with colD:
                     st.metric("Poly MAE (Z)", f"{stats['polynomial']['z']['mae']:.5f} m")
-                with colE:
-                    if stats['polynomial']['aic'] is not None:
-                        st.caption(f"AIC: {stats['polynomial']['aic']:.2f} | BIC: {stats['polynomial']['bic']:.2f}")
 
         if poly:
             st.markdown("---")
             st.subheader("Hypothesis Testing (Model Significance)")
+            # Significance level selector
+            alpha_sig = st.selectbox("Significance level (α)", options=[0.01, 0.05, 0.1], index=1, key="alpha_sig_ht")
             stats_poly = stats['polynomial'] if stats else None
-            if stats_poly and stats_poly['n'] > (poly['degree'] + 1 + 1):
+            if not stats_poly:
+                st.info("Polynomial statistics not available yet. Click 'Fit Spline + Polynomial & Extrapolate'.")
+            elif 'z' not in stats_poly or 'r2' not in stats_poly['z']:
+                st.info("R² for Z not computed yet. Try refitting the polynomial.")
+            elif stats_poly and stats_poly['n'] <= (poly['degree'] + 1 + 1):
+                st.info(f"Insufficient samples for F-test. Need n > k + 1 where k = degree+1. Current n={stats_poly['n']}, k={poly['degree'] + 1}.")
+            else:
                 n = stats_poly['n']
                 k = poly['degree'] + 1
                 r2 = stats_poly['z']['r2']
-                if 0 < r2 < 1:
+                # Overall F-test for model significance
+                if isinstance(r2, (int, float)) and 0 < r2 < 1:
                     F = (r2 / k) / ((1 - r2) / (n - k - 1))
                     st.code(f"Overall F-stat (Z): F = {F:.3f} with df=({k}, {n-k-1})", language='text')
+                    st.text("H0: All slope coefficients are 0 (no relationship).\nH1: At least one slope coefficient ≠ 0.")
+                    # Optional p-value if SciPy is available
+                    p_val = None
+                    try:
+                        if scipy_f_dist is not None and math.isfinite(F):
+                            p_val = float(scipy_f_dist.sf(F, k, n - k - 1))
+                    except Exception:
+                        p_val = None
+                    if p_val is not None:
+                        st.write(f"p-value: {p_val:.4g}")
+                        decision = "Reject H0" if p_val < alpha_sig else "Fail to Reject H0"
+                        st.write(f"Decision (@ α = {alpha_sig}): {decision}")
+                        if p_val < alpha_sig:
+                            st.success("Model is statistically significant")
+                        else:
+                            st.info("Model is NOT statistically significant")
+                    else:
+                        # Heuristic interpretation without p-value
+                        if F > 4.0:
+                            st.success("Model likely significant (heuristic; SciPy not available). Decision: Reject H0")
+                        elif F > 1.0:
+                            st.info("Model shows some explanatory power; borderline without exact p-value. Decision: Inconclusive")
+                        else:
+                            st.warning("Model likely not significant (heuristic). Decision: Fail to Reject H0")
                 else:
-                    st.info("Insufficient variance for F-stat computation.")
-            try:
-                from curve_fitting import _design_matrix, _normal_equations, _gaussian_elimination_solve
-                x_vals = [p['x'] for p in trajectory]
-                z_vals = [p['z'] for p in trajectory]
-                def fit_and_rss(deg):
-                    X = _design_matrix(x_vals, deg)
-                    XTX, XTy = _normal_equations(X, z_vals)
-                    coeffs = _gaussian_elimination_solve(XTX, XTy)
-                    rss = 0.0
-                    for xi, zi in zip(x_vals, z_vals):
-                        yhat = 0.0
-                        for c in reversed(coeffs):
-                            yhat = yhat * xi + c
-                        rss += (zi - yhat) ** 2
-                    return rss
-                if poly['degree'] >= 1:
-                    rss_small = fit_and_rss(poly['degree'] - 1)
-                    rss_large = fit_and_rss(poly['degree'])
-                    if rss_large > 0 and rss_small > 0:
-                        LR = len(x_vals) * math.log(rss_small / rss_large)
-                        st.code(f"Nested LR-stat (Z): {LR:.3f} (df = 1). Larger is more evidence for higher degree.", language='text')
-            except Exception:
-                pass
+                    st.info(f"Insufficient or invalid variance for F-stat computation. r2={r2}.")
+                # Nested F-test for degree k vs k-1
+                try:
+                    from curve_fitting import _design_matrix, _normal_equations, _gaussian_elimination_solve
+                    x_vals = [p['x'] for p in trajectory]
+                    z_vals = [p['z'] for p in trajectory]
+                    def fit_and_rss(deg):
+                        X = _design_matrix(x_vals, deg)
+                        XTX, XTy = _normal_equations(X, z_vals)
+                        coeffs = _gaussian_elimination_solve(XTX, XTy)
+                        rss = 0.0
+                        for xi, zi in zip(x_vals, z_vals):
+                            yhat = 0.0
+                            for c in reversed(coeffs):
+                                yhat = yhat * xi + c
+                            rss += (zi - yhat) ** 2
+                        return rss
+                    if poly['degree'] >= 1:
+                        rss_small = fit_and_rss(poly['degree'] - 1)
+                        rss_large = fit_and_rss(poly['degree'])
+                        if rss_large > 0 and rss_small > 0:
+                            LR = len(x_vals) * math.log(rss_small / rss_large)
+                            st.code(f"Nested LR-stat (Z): {LR:.3f} (df = 1). Larger is more evidence for higher degree.", language='text')
+                            # Classical nested F-test between degree k and k-1
+                            df1 = 1
+                            df2 = len(x_vals) - ((poly['degree'] + 1)) - 1
+                            if rss_small > rss_large and df2 > 0:
+                                F_nested = ((rss_small - rss_large) / df1) / (rss_large / df2)
+                                st.code(f"Nested F-test: F = {F_nested:.3f} with df=({df1}, {df2})", language='text')
+                                st.text("H0: Added degree term does not improve fit (coefficient = 0).\nH1: Added degree term improves fit (coefficient ≠ 0).")
+                                p_nested = None
+                                try:
+                                    if scipy_f_dist is not None and math.isfinite(F_nested):
+                                        p_nested = float(scipy_f_dist.sf(F_nested, df1, df2))
+                                except Exception:
+                                    p_nested = None
+                                if p_nested is not None:
+                                    st.write(f"p-value (k vs k-1): {p_nested:.4g}")
+                                    decision_nested = "Reject H0 (keep higher degree)" if p_nested < alpha_sig else "Fail to Reject H0 (prefer lower degree)"
+                                    st.write(f"Decision (@ α = {alpha_sig}): {decision_nested}")
+                                    if p_nested < alpha_sig:
+                                        st.success("Higher degree is justified")
+                                    else:
+                                        st.info("No significant improvement; consider lower degree")
+                                else:
+                                    if F_nested > 4.0:
+                                        st.success("Higher degree likely justified (heuristic). Decision: Reject H0")
+                                    else:
+                                        st.info("Improvement appears modest; lower degree may suffice (heuristic). Decision: Fail to Reject H0")
+                            else:
+                                st.info(f"Cannot run nested F-test. Conditions: rss_small({rss_small}) > rss_large({rss_large}) and df2({df2}) > 0 must hold.")
+                except Exception:
+                    pass
+        else:
+            st.info("Polynomial model not fitted yet. Use the button above to fit the model.")
     
     if st.session_state.extrapolated:
         st.markdown("---")
@@ -428,8 +499,6 @@ def render_lbw_decision_page():
             with col4:
                 st.metric("Lateral Variation", f"{path['lateral_variation']:.3f} m")
             
-            st.info(f"**Trajectory Type:** {path['trajectory_type']}")
-
  # 3D visualization page
 def render_3d_visualization_page():
     st.header("Interactive 3D Ball Trajectory Visualization")
@@ -477,15 +546,7 @@ def render_advanced_analysis_page():
 
     trajectory = st.session_state.trajectory
 
-    st.subheader("Trajectory Decomposition (Trend + Noise Analysis)")
-    st.markdown("""
-    Decomposes tracked trajectory into:
-    - **Trend**: Smooth underlying motion pattern (via exponential smoothing)
-    - **Noise**: Random measurement variations
-    - **SNR**: Signal-to-Noise Ratio (quality indicator)
-    - **Curvature & Diagnostics**: Detects swing, bounce, or lateral deviations
-    """)
-
+    st.subheader("Exponential Smoothing First and Second Order")
     method = st.selectbox("Smoothing Method", ["Exponential (First Order)", "Exponential (Second Order)"])
     alpha = st.slider("Alpha (smoothing)", 0.05, 0.95, 0.30, 0.05)
 
@@ -498,42 +559,46 @@ def render_advanced_analysis_page():
                 st.error(decomp["error"])
                 return
 
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Noise Std (Z)", f"{decomp['noise_std_z']:.4f} m")
-            with col2:
-                st.metric("Noise Std (Y)", f"{decomp['noise_std_y']:.4f} m")
-            with col3:
-                st.metric("SNR Z", f"{decomp['snr_z']:.2f}")
-            with col4:
-                st.metric("SNR Y", f"{decomp['snr_y']:.2f}")
+            st.subheader("Original vs Smoothed")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Z-Axis Trend Analysis**")
-                st.write(f"Trend points: {len(decomp['trend_z'])}")
-                st.write(f"Mean Curvature: {decomp['curvature_z_mean']:.5f}")
-                st.write(f"Dominant Noise Frequency: {decomp['dominant_noise_freq_z']}")
-            with col2:
-                st.write("**Y-Axis Trend Analysis**")
-                st.write(f"Trend points: {len(decomp['trend_y'])}")
-                st.write(f"Mean Curvature: {decomp['curvature_y_mean']:.5f}")
-                st.write(f"Dominant Noise Frequency: {decomp['dominant_noise_freq_y']}")
+            # Original vs Smoothed plots
+            x_vals = [p['x'] for p in trajectory]
+            z_actual = [p['z'] for p in trajectory]
+            y_actual = [p['y'] for p in trajectory]
 
-            st.info(f"**Quality Assessment:** {decomp['quality_assessment']}")
-            st.markdown("**Diagnostic Remarks:**")
-            st.write(decomp['diagnostic_remarks'])
+            fig_z = go.Figure()
+            fig_z.add_trace(go.Scatter(x=x_vals, y=z_actual, mode='lines+markers', name='Z Actual'))
+            fig_z.add_trace(go.Scatter(x=x_vals, y=decomp['trend_z'], mode='lines', name='Z Smoothed'))
+            fig_z.update_layout(title='Original vs Smoothed (Z)', xaxis_title='x (m)', yaxis_title='z (m)', legend_title='Series')
+            st.plotly_chart(fig_z, use_container_width=True)
 
-            with st.expander("Preview Trend vs Actual (first 10 points)"):
-                import pandas as pd
-                df_prev = pd.DataFrame({
-                    'x': [p['x'] for p in trajectory],
-                    'z_actual': [p['z'] for p in trajectory],
-                    'z_trend': decomp['trend_z'],
-                    'y_actual': [p['y'] for p in trajectory],
-                    'y_trend': decomp['trend_y'],
-                }).head(10)
-                st.dataframe(df_prev, use_container_width=True)
+            fig_y = go.Figure()
+            fig_y.add_trace(go.Scatter(x=x_vals, y=y_actual, mode='lines+markers', name='Y Actual'))
+            fig_y.add_trace(go.Scatter(x=x_vals, y=decomp['trend_y'], mode='lines', name='Y Smoothed'))
+            fig_y.update_layout(title='Original vs Smoothed (Y)', xaxis_title='x (m)', yaxis_title='y (m)', legend_title='Series')
+            st.plotly_chart(fig_y, use_container_width=True)
+
+            # Smoothing values table
+            st.subheader("Smoothing Table (Exponential)")
+            df_smooth = pd.DataFrame({
+                'x': x_vals,
+                'z_actual': z_actual,
+                'z_smoothed': decomp['trend_z'],
+                'y_actual': y_actual,
+                'y_smoothed': decomp['trend_y'],
+            })
+            st.dataframe(df_smooth, use_container_width=True)
+
+            csv = df_smooth.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Smoothing Table (CSV)",
+                data=csv,
+                file_name="exponential_smoothing_values.csv",
+                mime="text/csv",
+                key="download_smoothing_table"
+            )
+
+            
             
                
 if __name__ == "__main__":
