@@ -326,7 +326,7 @@ def render_trajectory_analysis_page():
 
     if st.session_state.extrapolated:
         st.markdown("---")
-        st.subheader("Extrapolated Points (Physics-Based)")
+        st.subheader("Extrapolated Points")
         
         col1, col2 = st.columns([2, 1])
         

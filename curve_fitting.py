@@ -390,11 +390,10 @@ def calculate_rmse(trajectory, spline_model):
     
     return {'rmse_z': rmse_z, 'rmse_y': rmse_y}
 
-# Builds Vandermonde design matrix up to a specified polynomial degree
 def _design_matrix(x_values, degree):
     return [[(x ** p) for p in range(degree + 1)] for x in x_values]
 
-# Solves linear system with Gaussian elimination and partial pivoting
+# Solves linear system with Gaussian elimination
 def _gaussian_elimination_solve(A, b):
     n = len(A)
     M = [row[:] + [b[i]] for i, row in enumerate(A)]
@@ -501,25 +500,14 @@ def statistics_for_spline(trajectory, spline_model):
     def predictor(x):
         return evaluate_spline(spline_model, x, 'z'), evaluate_spline(spline_model, x, 'y')
     stats = _calc_errors(trajectory, predictor)
-    stats['aic'] = None
-    stats['bic'] = None
     stats['model_type'] = 'spline'
     return stats
 
-# Returns error metrics and AIC/BIC for polynomial fit
+# Returns error metrics for polynomial fit
 def statistics_for_polynomial(trajectory, poly_model):
     def predictor(x):
         return evaluate_polynomial(poly_model, x, 'z'), evaluate_polynomial(poly_model, x, 'y')
     stats = _calc_errors(trajectory, predictor)
-    n = stats['n'] if stats['n'] else len(trajectory)
-    k = poly_model['degree'] + 1
-    rss_z = (stats['z']['rmse'] ** 2) * n
-    if rss_z <= 0:
-        rss_z = 1e-12
-    aic = n * math.log(rss_z / n) + 2 * k
-    bic = n * math.log(rss_z / n) + k * math.log(max(n, 1))
-    stats['aic'] = aic
-    stats['bic'] = bic
     stats['model_type'] = 'polynomial'
     return stats
 
@@ -547,8 +535,6 @@ def select_best_model(spline_stats, poly_stats):
             else:
                 best = 'spline'
                 reason.append('Lower MAE (Z)')
-    if best == 'polynomial' and poly_stats.get('aic') is not None:
-        reason.append('Better information criteria (AIC/BIC)')
     return {'best': best, 'reason': ', '.join(reason)}
 
 # Builds a readable polynomial equation string for z or y
