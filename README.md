@@ -4,9 +4,6 @@
 1. [Prerequisites](#prerequisites)
 2. [Installation](#installation)
 3. [Running the Application](#running-the-application)
-4. [User Guide](#user-guide)
-5. [Troubleshooting](#troubleshooting)
-6. [Advanced Usage](#advanced-usage)
 
 ---
 
@@ -139,16 +136,5 @@ streamlit cache clear
 # Check version
 streamlit --version
 ```
-
----
-
-## License & Credits
-
-**License**: MIT  
-**Author**: DRS-Lite Development Team  
-**Version**: 1.0.0  
-**Last Updated**: 2025
-
-Built with ❤️ and pure mathematics
 
 ---
