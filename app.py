@@ -13,10 +13,7 @@ from curve_fitting import (fit_cubic_spline, extrapolate_to_stumps,
                            calculate_rmse, evaluate_spline,
                            fit_polynomial, statistics_for_spline,
                            statistics_for_polynomial, select_best_model,
-                           get_polynomial_equation_text,
-                           build_lagrange_models_for_trajectory,
-                           get_lagrange_polynomial_text,
-                           evaluate_lagrange)
+                           get_polynomial_equation_text)
 from lbw_analysis import calculate_lbw_decision, analyze_ball_path
 from visualization import create_trajectory_plot, create_2d_plots
 from math_utils import mean, std_deviation
@@ -53,7 +50,7 @@ def main():
         ["Trajectory Analysis",
          "LBW Decision",
          "3D Visualization",
-         "Advanced Analysis"]
+         "Exponential Smoothing"]
     )
     
     st.sidebar.markdown("---")
@@ -93,7 +90,7 @@ def main():
         render_lbw_decision_page()
     elif page == "3D Visualization":
         render_3d_visualization_page()
-    elif page == "Advanced Analysis":
+    elif page == "Exponential Smoothing":
         render_advanced_analysis_page()
 
 def render_trajectory_analysis_page():
@@ -207,15 +204,7 @@ def render_trajectory_analysis_page():
                 else:
                     st.info("Polynomial not fitted yet.")
 
-        with st.expander("Interpolation (Lagrange)", expanded=False):
-            max_deg = max(1, min(6, len(trajectory) - 1))
-            fixed_deg = 2 if max_deg >= 2 else 1
-            models_lagr = build_lagrange_models_for_trajectory(trajectory, degree=fixed_deg)
-            tabs_interp = st.tabs(["Lagrange Z Poly", "Lagrange Y Poly"])
-            with tabs_interp[0]:
-                st.code(get_lagrange_polynomial_text(models_lagr['z']), language='text')
-            with tabs_interp[1]:
-                st.code(get_lagrange_polynomial_text(models_lagr['y']), language='text')
+        
 
         if stats and stats['comparison']:
             st.markdown("---")

@@ -282,35 +282,3 @@ def create_2d_plots(tracked_trajectory, extrapolated_trajectory=None):
     fig.update_layout(height=400, showlegend=True)
     
     return fig
-
-# Create risk-return scatter
-def create_risk_return_plot(points, frontier=None):
-    fig = go.Figure()
-    for p in points:
-        fig.add_trace(go.Scatter(
-            x=[p['risk']],
-            y=[p['ret']],
-            mode='markers+text',
-            text=[p['scenario']],
-            textposition='top center',
-            name=p['scenario'],
-            marker=dict(size=10)
-        ))
-    if frontier and len(frontier) >= 2:
-        xs = [r for r, m in frontier]
-        ys = [m for r, m in frontier]
-        fig.add_trace(go.Scatter(
-            x=xs,
-            y=ys,
-            mode='lines',
-            name='Frontier (2-scenario)',
-            line=dict(color='orange', dash='dash')
-        ))
-    fig.update_layout(
-        title='Risk-Return (Scenario Portfolio)',
-        xaxis_title='Risk (Std Dev of Proxy)',
-        yaxis_title='Return (Mean Proxy)',
-        template='plotly_dark',
-        height=450,
-    )
-    return fig

@@ -1,9 +1,3 @@
-"""
-LBW (Leg Before Wicket) Decision Analysis - UPDATED
-Real cricket rules implementation with DRS system
-Enhanced with advanced analysis features
-"""
-
 def calculate_lbw_decision(tracked_trajectory, extrapolated_trajectory, stump_x=20.0, 
                           stump_height=0.71, stump_width=0.228):
     """
