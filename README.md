@@ -91,15 +91,6 @@ The application will:
 streamlit run app.py --server.port 8080
 ```
 
-### Run in Background
-```bash
-# Linux/macOS
-nohup streamlit run app.py &
-
-# Windows (PowerShell)
-Start-Process streamlit -ArgumentList "run app.py" -WindowStyle Hidden
-```
-
 ---
 
 ## Deployment
