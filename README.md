@@ -152,20 +152,3 @@ streamlit --version
 Built with ❤️ and pure mathematics
 
 ---
-
-## Quick Reference Card
-
-| Action | Command |
-|--------|---------|
-| Start App | `streamlit run app.py` |
-| Stop App | `Ctrl + C` |
-| Clear Cache | `streamlit cache clear` |
-| Change Port | `--server.port 8080` |
-| Help | `streamlit --help` |
-
-**Default Parameters**:
-- Speed: 35 m/s
-- Elevation: 3°
-- Noise: 0.02 m
-- Stump Distance: 20.12 m
-- Stump Height: 0.71 m
